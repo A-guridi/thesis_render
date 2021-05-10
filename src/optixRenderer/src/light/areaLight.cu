@@ -8,14 +8,12 @@
 #include "random.h"
 #include "commonStructs.h"
 
-
 using namespace optix;
 
 rtDeclareVariable( float3, shading_normal, attribute shading_normal, ); 
 rtDeclareVariable( float3, geometric_normal, attribute geometric_normal, );
-rtDeclareVariable( float, t_hit, rtIntersectionDistance, ); // with this the hitPoint can be calculated
+rtDeclareVariable( float, t_hit, rtIntersectionDistance, );
 rtDeclareVariable(int, max_depth, , );
-
 
 rtDeclareVariable(optix::Ray, ray,   rtCurrentRay, );
 rtDeclareVariable(PerRayData_radiance, prd_radiance, rtPayload, );
@@ -28,12 +26,6 @@ rtDeclareVariable(int, areaTriangleNum, , );
 rtBuffer<areaLight> areaLights;
 rtBuffer<float> areaLightCDF;
 rtBuffer<float> areaLightPDF;
-
-
-/**
- * RENDER PARTS
- * */
-
 
 RT_CALLABLE_PROGRAM void sampleAreaLight(unsigned int& seed, float3& radiance, float3& position, float3& normal, float& pdfAreaLight){
     float randf = rnd(seed);

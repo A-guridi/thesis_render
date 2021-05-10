@@ -20,7 +20,6 @@ void createGeometry(
         Context& context,
         const std::vector<shape_t>& shapes,
         const std::vector<material_t>& materials,
-        int mode,
-        float pol_angle);
+        int mode );
 
 #endif

@@ -21,7 +21,7 @@ Material createDiffuseMaterial(Context& context, material_t mat);
 
 Material createPhongMaterial(Context& context, material_t mat);
 
-Material createMicrofacetMaterial(Context& context, material_t mat, float pol_angle);
+Material createMicrofacetMaterial(Context& context, material_t mat);
 
 Material createDielectricMaterial(Context& context, material_t mat);
 
