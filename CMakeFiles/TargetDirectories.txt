@@ -1,0 +1,10 @@
+/home/ubuntu/Documents/render/CMakeFiles/rebuild_cache.dir
+/home/ubuntu/Documents/render/CMakeFiles/edit_cache.dir
+/home/ubuntu/Documents/render/optixRenderer/CMakeFiles/rebuild_cache.dir
+/home/ubuntu/Documents/render/optixRenderer/CMakeFiles/edit_cache.dir
+/home/ubuntu/Documents/render/optixRenderer/src/CMakeFiles/rebuild_cache.dir
+/home/ubuntu/Documents/render/optixRenderer/src/CMakeFiles/optixRenderer.dir
+/home/ubuntu/Documents/render/optixRenderer/src/CMakeFiles/edit_cache.dir
+/home/ubuntu/Documents/render/sutil/CMakeFiles/rebuild_cache.dir
+/home/ubuntu/Documents/render/sutil/CMakeFiles/sutil_sdk.dir
+/home/ubuntu/Documents/render/sutil/CMakeFiles/edit_cache.dir
