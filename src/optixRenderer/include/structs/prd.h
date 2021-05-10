@@ -29,35 +29,6 @@
 #pragma once
 
 #include <optixu/optixu_vector_types.h>
-// added structs of polarized light
-//struct representing a 4x4 matrix for the Mueller Data
-struct float4x4{
-    float4 r0;
-    float4 r1;
-    float4 r2;
-    float4 r3;
-};
-struct MuellerData
-{
-    // they are 4x4 matrices
-    // red, green, and blue Mueller matrices
-    //float4x4 mm;
-    float4x4 mmR;
-    float4x4 mmG;
-    float4x4 mmB;
-};
-
-struct StokesLight
-{
-    // red, green, and blue Stokes vectors
-    //float4 sv;
-    float4 svR;
-    float4 svG;
-    float4 svB;
-
-    // local coordinate system's x-axis unit vector
-    float3 referenceX;
-};
 
 struct PerRayData_radiance
 {
@@ -73,50 +44,9 @@ struct PerRayData_radiance
 
  float pdf;
 
- StokesLight lightData;
-
 };
 
 struct PerRayData_shadow
 {
     bool inShadow;
 };
-
-//operators for 4x4 matrices
-
-inline __host__ __device__ float4x4 operator+(float4x4 a, float4x4 b)
-{
-    float4x4 res;
-    res.r0=a.r0+b.r0;
-    res.r1=a.r1+b.r1;
-    res.r2=a.r2+b.r2;
-    res.r3=a.r3+b.r3;
-    return res;
-}
-//operator + for 4x4 and consant
-inline __host__ __device__ float4x4 operator+(float4x4 a, float b)
-{
-    float4x4 res;
-    res.r0=a.r0+b;
-    res.r1=a.r1+b;
-    res.r2=a.r2+b;
-    res.r3=a.r3+b;
-    return res;
-}
-//operator * for 4x4 and constant
-inline __host__ __device__ float4x4 operator*(float4x4 a, float b)
-{
-    float4x4 res;
-    res.r0=a.r0*b;
-    res.r1=a.r1*b;
-    res.r2=a.r2*b;
-    res.r3=a.r3*b;
-    return res;
-}
-inline __host__ __device__ void operator*=(float4x4 &a, float b)
-{
-    a.r0*=b;
-    a.r1*=b;
-    a.r2*=b;
-    a.r3*=b;
-}
