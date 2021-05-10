@@ -25,14 +25,8 @@ Material createDefaultMaterial(Context& context ){
     TextureSampler albedoSampler = createTextureSampler(context);
     material["isAlbedoTexture"] -> setInt(0);   
     loadEmptyToTextureSampler(context, albedoSampler);
-    material["albedo"] -> setFloat(0.5, 0.5, 0.5 );
+    material["albedo"] -> setFloat(0.8, 0.8, 0.8 );
     material["albedoMap"] -> setTextureSampler(albedoSampler);
-
-    TextureSampler specularSampler = createTextureSampler(context);
-    material["isSpecularTexture"] -> setInt(0);
-    loadEmptyToTextureSampler(context, specularSampler);
-    material["specular"] -> setFloat(0.5, 0.5, 0.5 );
-    material["specularMap"] -> setTextureSampler(specularSampler);
         
     TextureSampler roughSampler = createTextureSampler(context);
     material["isRoughTexture"] -> setInt(0);

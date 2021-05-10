@@ -491,12 +491,6 @@ bool loadBsdfFromXML(std::vector<material_t>& materials, TiXmlNode* module, std:
                                 if(matSubAttri -> Value() == std::string("albedo") ){
                                     rgbName = std::string("albedo" );
                                 }
-                                else if(matSubAttri -> Value() == std::string("specular") ){
-                                    rgbName = std::string("specular");
-                                }
-                                else if(matSubAttri -> Value() == std::string("specularScale") ){
-                                    rgbName = std::string("specularScale");
-                                }
                                 else if(matSubAttri -> Value() == std::string("albedoScale") ){
                                     rgbName = std::string("albedoScale");
                                 }
@@ -513,16 +507,6 @@ bool loadBsdfFromXML(std::vector<material_t>& materials, TiXmlNode* module, std:
                                     mat.albedo[0] = paraArr[0];
                                     mat.albedo[1] = paraArr[1];
                                     mat.albedo[2] = paraArr[2];
-                                }
-                                else if(rgbName == std::string("specular") ){
-                                    mat.specular[0] = paraArr[0];
-                                    mat.specular[1] = paraArr[1];
-                                    mat.specular[2] = paraArr[2];
-                                }
-                                else if(rgbName == std::string("specularScale") ){
-                                    mat.specularScale[0] = paraArr[0];
-                                    mat.specularScale[1] = paraArr[1];
-                                    mat.specularScale[2] = paraArr[2];
                                 }
                                 else if(rgbName == std::string("albedoScale" ) ){
                                     mat.albedoScale[0] = paraArr[0];

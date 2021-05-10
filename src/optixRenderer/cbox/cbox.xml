@@ -39,16 +39,10 @@
     </bsdf>
 
     <bsdf type="dielectric" id="transparent">
-        <float name="intIOR" value="1.33"/>
-        <float name="extIOR" value="1.0"/>
+        <float name="intIOR" value=1.33/>
+        <float name="extIOR" value=1.0/>
     </bsdf>
-
-	<bsdf type="microfacet" id="microwhite">
-		<rgb name="albedo" value="0.5 0.5 0.5"/>
-		<rgb name="albedoScale" value="0.5 0.5 0.5"/>
-		<float name="roughnessScale" value="0.8" />
-	</bsdf>
-
+    
 	<shape type="obj">
         <string name="filename" value="meshes/cbox_luminaire.obj"/>
 		<emitter type="area">
@@ -83,12 +77,12 @@
 
 	<shape type="obj">
         <string name="filename" value="meshes/cbox_smallbox.obj"/>
-		<ref id="microwhite"/>
+		<ref id="transparent"/>
     </shape>
     
     <shape type="obj">
         <string name="filename" value="meshes/cbox_largebox.obj"/>
-		<ref id="microwhite"/>
+		<ref id="transparent"/>
     </shape>
     
 </scene>
