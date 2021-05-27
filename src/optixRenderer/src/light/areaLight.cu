@@ -8,6 +8,9 @@
 #include "random.h"
 #include "commonStructs.h"
 
+#include <cmath>
+#include <iostream>
+
 using namespace optix;
 
 rtDeclareVariable( float3, shading_normal, attribute shading_normal, ); 
@@ -45,6 +48,15 @@ rtBuffer<float> areaLightPDF;
 
 #define REFL_MISS_COLOR COLOR_BLACK
 
+// the filter angles
+
+//float3 metalIoRn;     //not needed for non metals
+const float  nonMetalIoRn=1.5;
+//float3 metalIoRk;     //not needed for non metals, since is always 0 for dielectric materials
+const float filterangle=0;    //angle in degrees
+const float  filterCos2A=cos( 2*filterangle *M_PI/180);
+const float  filterSin2A=sin( 2*filterangle *M_PI/180);
+const bool   filterEnabled=true;
 //**************************************************************************************************
 // We dont need constant buffers as they are the rtVaariables
 //**************************************************************************************************
@@ -128,6 +140,7 @@ void initPayload()
 {
     // adapted function to use the prd_radiance instead of creating a new ray payload
     prd_radiance.lightData=initStokes();
+    // pay.lightData = initStokes();    // old one, left for reference
 }
 //**************************************************************************************************
 // StokesLight functions
@@ -158,7 +171,7 @@ void rotateStokes(float4 &S, float c2p, float s2p)
 */
 void rotateReferenceFrame(StokesLight &light, float3 newX, float3 dir)
 {
-    float dotX = dot(light.referenceX, newX);
+    float dotX = dot(light.referenceX, newX);   //dot product
     float detX = dot(dir, cross(light.referenceX, newX));
     float phi = atan2(detX, dotX);
 
@@ -185,8 +198,8 @@ void slAddEquals(StokesLight &a, StokesLight b, float3 dir)
 */
 void polarizeStokes(float4 &s)
 {
-    uniform float a = filterCos2A;
-    uniform float b = filterSin2A;
+    const float a = filterCos2A;
+    const float b = filterSin2A;
     float3 oldXYZ = s.xyz;
 
     s.x = dot(oldXYZ, float3(1.0,   a,   b));
@@ -205,9 +218,136 @@ void applyPolarizingFilter(StokesLight &l)
     polarizeStokes(l.svG);
     polarizeStokes(l.svB);
 }
+//**************************************************************************************************
+// Shading functions
+//**************************************************************************************************
+
+/** Lambertian diffuse
+ * Diffuse reflection Termn ( all directions)
+*/
+float3 Fd_Lambert(float3 color, float NdotL)
+{
+    return color*M_INV_PI*NdotL;
+}
+
+/** GGX Normal Distribution Function (D)
+ * For specular and mirror reflection
+ * aplha: square root of roughness
+*/
+//TODO: how to get the roughness ? (Max value: 0.08**2)
+float D_GGX(float alpha, float NdotH)
+{
+    float a2 = alpha*alpha;
+    float d  = ((NdotH*a2 - NdotH)*NdotH + 1.0);
+    return a2/(M_PI*d*d);
+}
+
+/** Smith-GGX Visibility Function (V)
+    V = G/(4*NdotL*NdotV)
+*/
+float V_SmithGGX(float NdotL, float NdotV, float roughness)
+{
+    float a2 = roughness*roughness;
+    float ggxv = NdotL*sqrt((-NdotV*a2 + NdotV)*NdotV + a2);
+    float ggxl = NdotV*sqrt((-NdotL*a2 + NdotL)*NdotL + a2);
+    return 0.5/(ggxv + ggxl);
+}
+
+/** Mueller Matrix for Fresnel reflections
+    n, k : Real and complex parts of the Index of Refraction
+    n=1.5 or n=1.33 and k=0 for glass and most dielectrics
+    theta: angle between h and v
+*/
+float4x4 F_MuellerMatrix(float n, float k, float sinTheta, float cosTheta, float tanTheta)
+{
+    float n2 = n*n;
+    float k2 = k*k;
+    float st2 = sinTheta*sinTheta;
+
+    float left  = sqrt((n2 - k2 - st2)*(n2 - k2 - st2) + 4*n2*k2);
+    float right = n2 - k2 - st2;
+
+    float a2 = 0.5*(left + right);
+    float b2 = 0.5*(left - right);
+
+    float a = sqrt(a2);
+    float b = sqrt(max(b2,0.0));
+    float ct2 = cosTheta*cosTheta;
+
+    // orthogonal
+    float ortA = a2 + b2 + ct2;
+    float ortB = 2.0*a*cosTheta;
+
+    // parallel
+    float parA = a2 + b2 + st2*tanTheta*tanTheta;
+    float parB = 2.0*a*sinTheta*tanTheta;
+
+    // Fresnel parameters
+    float F_ort = (ortA - ortB)/(ortA + ortB);
+    float F_par = ((parA - parB)/(parA + parB))*F_ort;
+    float D_ort = atan((2*b*cosTheta)/(ct2 - a2 - b2));
+    float D_par = atan((2*cosTheta*((n2 - k2)*b - 2*n*k*a))/((n2 + k2)*(n2 + k2)*ct2 - a2 - b2));
+
+    float phaseDiff = D_ort - D_par;
+
+    // Matrix components
+    float A = 0.5*(F_ort + F_par);
+    float B = 0.5*(F_ort - F_par);
+    float C = cos(phaseDiff)*sqrt(F_ort*F_par);
+    float S = sin(phaseDiff)*sqrt(F_ort*F_par);
+
+    return float4x4(  A,   B, 0.0, 0.0,
+                      B,   A, 0.0, 0.0,
+                      0.0, 0.0,   C,   S,
+                      0.0, 0.0,  -S,   C);
+}
+/** Polarization sensitive Fresnel Function (F)
+*/
+MuellerData F_Polarizing(float metalness, float sinTheta, float cosTheta, float tanTheta)
+{
+    // Index of Refraction is not available in material textures so it is set from the constant buffer
+    float3 IoR_n = std::lerp(nonMetalIoRn, metalIoRn, metalness);        // = nonMetalIoR + metalness*(metalIoR-nonmetalIoR)
+    float3 IoR_k = metalness*metalIoRk; // k is zero for non-metals
+
+    MuellerData mdF;
+    mdF.mmR = F_MuellerMatrix(IoR_n.r, IoR_k.r, sinTheta, cosTheta, tanTheta);
+    mdF.mmG = F_MuellerMatrix(IoR_n.g, IoR_k.g, sinTheta, cosTheta, tanTheta);
+    mdF.mmB = F_MuellerMatrix(IoR_n.b, IoR_k.b, sinTheta, cosTheta, tanTheta);
+
+    return mdF;
+}
+
+/** Cook-Torrance Specular Term
+ * Ks= D*V*F
+ * the F term is the polarized one with the Mueller matrices
+ * the roughness=arccos(dot(N,H))
+ * N: surface normal
+ * H: half-angle vector
+ * L: light vector
+*/
+MuellerData CookTorrance_Pol(ShadingData sd, LightSample ls)
+{
+    float  D = D_GGX(sd.roughness, ls.NdotH);
+    float  V = V_SmithGGX(ls.NdotL, sd.NdotV, sd.roughness);
+
+    float3 H = normalize(sd.V + ls.L);
+
+    float sinTheta = length(cross(ls.L, H));
+    float cosTheta = ls.LdotH; // used since (LdotH == VdotH)
+    float tanTheta = sinTheta/cosTheta;
+
+    MuellerData F = F_Polarizing(sd.metalness, sinTheta, cosTheta, tanTheta);
+    MD_MUL_EQ_SCALAR(F, (D*V*ls.NdotL));
+
+    return F;
+}
+
+
 /**
  * RENDER PARTS
  * */
+
+
 RT_CALLABLE_PROGRAM void sampleAreaLight(unsigned int& seed, float3& radiance, float3& position, float3& normal, float& pdfAreaLight){
     float randf = rnd(seed);
 
