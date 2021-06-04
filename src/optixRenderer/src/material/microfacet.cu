@@ -82,41 +82,390 @@ rtDeclareVariable(int, isPointLight, , );
 rtDeclareVariable(int, pointLightNum, , );
 rtBuffer<Point> pointLights;
 
+// added polarization
+#define M_PI     3.14159265358979323846
+#define M_PI2    6.28318530717958647692
+#define M_INV_PI 0.3183098861837906715
 
-// Geometry Group
+rtDeclareVariable(float, filterangle, , );
+rtDeclareVariable(int,  max_depth, , );
+
+#define  filterCos2A=cos( 2*filterangle *M_PI/180);     // we keep the name as in the original renderer thesis
+#define  filterSin2A=sin( 2*filterangle *M_PI/180);
+
+#define REFL_MISS_COLOR float3(0.0, 0.0, 0.0)
+/**
+ * Added Light Data structures
+ */
 rtDeclareVariable( rtObject, top_object, , );
 
 rtDeclareVariable(
-        rtCallableProgramX<void(unsigned int&, float3&, float3&, float&)>, 
+        rtCallableProgramX<void(unsigned int&, float3&, float3&, float&)>,
         sampleEnvironmapLight, , );
 rtDeclareVariable(
-        rtCallableProgramX<void(unsigned int&, float3&, float3&, float3&, float&)>, 
+        rtCallableProgramX<void(unsigned int&, float3&, float3&, float3&, float&)>,
         sampleAreaLight, , );
 
+//**************************************************************************************************
+// Data structures and initializer functions
+//**************************************************************************************************
 
-// Computing the pdfSolidAngle of BRDF giving a direction 
+struct MuellerData
+{
+    // red, green, and blue Mueller matrices
+    float4x4 mmR;
+    float4x4 mmG;
+    float4x4 mmB;
+};
+
+struct StokesLight
+{
+    // red, green, and blue Stokes vectors
+    float4 svR;
+    float4 svG;
+    float4 svB;
+
+    // local coordinate system's x-axis unit vector
+    float3 referenceX;
+};
+
+RT_CALLABLE_PROGRAM StokesLight initStokes()
+{
+    StokesLight sl;
+    sl.svR = float4(0.0, 0.0, 0.0, 0.0);
+    sl.svG = float4(0.0, 0.0, 0.0, 0.0);
+    sl.svB = float4(0.0, 0.0, 0.0, 0.0);
+    sl.referenceX = float3(1.0, 0.0, 0.0);
+
+    return sl;
+}
+
+RT_CALLABLE_PROGRAM StokesLight unPolarizedLight(float3 color)
+{
+    StokesLight sl = initStokes();
+    sl.svR.x = color.r;
+    sl.svG.x = color.g;
+    sl.svB.x = color.b;
+    return sl;
+}
+
+RT_CALLABLE_PROGRAM float3 stokesToColor(StokesLight sl) {
+    return saturate(float3(sl.svR.x, sl.svG.x, sl.svB.x));
+}
+//**************************************************************************************************
+// Operator macros for StokesLight and MuellerData
+//**************************************************************************************************
+
+// operator += for StokesLight and unpolarized float3 color
+// unpolarized light can be added directly, no need to first create a Stokes vector for it
+#define SL_ADD_EQ_UNPOL(sl, c) sl.svR.x += c.r; \
+                               sl.svG.x += c.g; \
+                               sl.svB.x += c.b;
+
+// operator += for two already aligned StokesLight parameters
+#define SL_ADD_EQ_POL(sl_a, sl_b) sl_a.svR += sl_b.svR; \
+                                  sl_a.svG += sl_b.svG; \
+                                  sl_a.svB += sl_b.svB;
+
+// operator *= for StokesLight and MuellerData
+#define SL_MUL_EQ_MD(sl, md) sl.svR = mul(sl.svR, md.mmR); \
+                             sl.svG = mul(sl.svG, md.mmG); \
+                             sl.svB = mul(sl.svB, md.mmB);
+
+
+// operator *= for MuellerData and a scalar
+#define MD_MUL_EQ_SCALAR(md, s) md.mmR *= s; md.mmG *= s; md.mmB *= s;
+
+//**************************************************************************************************
+// Ray payload
+//**************************************************************************************************
+
+
+RT_CALLABLE_PROGRAM void initPayload()
+{
+    // adapted function to use the prd_radiance instead of creating a new ray payload
+    prd_radiance.lightData=initStokes();
+    // pay.lightData = initStokes();    // old one, left for reference
+}
+//**************************************************************************************************
+// StokesLight functions
+//**************************************************************************************************
+
+// Get the normalized reference x vector from normalized y and z vectors
+RT_CALLABLE_PROGRAM float3 computeX(float3 y, float3 z)
+{
+    return normalize(cross(y, z));
+}
+
+/** Rotate the reference frame of a Stokes vector
+  c2p: cos(2phi)
+  s2p: sin(2phi)
+  inout param substitued by reference &
+*/
+RT_CALLABLE_PROGRAM void rotateStokes(float4 &S, float c2p, float s2p)
+{
+    float old_y = S.y;
+    float old_z = S.z;
+
+    S.y =  c2p*old_y + s2p*old_z;
+    S.z = -s2p*old_y + c2p*old_z;
+}
+
+/** Rotate reference frame
+  The light's direction vector dir is needed to rotate the reference X around
+*/
+RT_CALLABLE_PROGRAM void rotateReferenceFrame(StokesLight &light, float3 newX, float3 dir)
+{
+    float dotX = dot(light.referenceX, newX);   //dot product
+    float detX = dot(dir, cross(light.referenceX, newX));
+    float phi = atan2(detX, dotX);
+
+    float c2p = cos(2*phi);
+    float s2p = sin(2*phi);
+
+    rotateStokes(light.svR, c2p, s2p);
+    rotateStokes(light.svG, c2p, s2p);
+    rotateStokes(light.svB, c2p, s2p);
+    light.referenceX = newX;
+}
+
+/** a+=b operator for StokesLight
+  Rotates b's reference frame before addition if needed.
+*/
+RT_CALLABLE_PROGRAM void slAddEquals(StokesLight &a, StokesLight b, float3 dir)
+{
+    // Make sure b's reference frame matches a's before adding them
+    rotateReferenceFrame(b, a.referenceX, dir);
+    SL_ADD_EQ_POL(a, b);
+}
+
+/** Applies the polarizing filter to a Stokes vector s
+*/
+RT_CALLABLE_PROGRAM void polarizeStokes(float4 &s)
+{
+    const float a = filterCos2A;
+    const float b = filterSin2A;
+    float3 oldXYZ = s.xyz;
+
+    s.x = dot(oldXYZ, float3(1.0,   a,   b));
+    s.y = dot(oldXYZ, float3(  a, a*a, a*b));
+    s.z = dot(oldXYZ, float3(  b, a*b, b*b));
+    s.w = 0.0;
+}
+
+/** Applies a horizontal polarizing filter that's been rotated clockwise by angle A
+  Note: also doubles the intensity to compensate for the filter on average blocking half of the
+        incoming light.
+*/
+RT_CALLABLE_PROGRAM void applyPolarizingFilter(StokesLight &l)
+{
+    polarizeStokes(l.svR);
+    polarizeStokes(l.svG);
+    polarizeStokes(l.svB);
+}
+//************************************************************************************************
+// Geometry Group (from optiX)
+//************************************************************************************************
+
+//************************************************************************************************
+// Mueller Matrices
+//************************************************************************************************
+/** Mueller Matrix for Fresnel reflections
+    n, k : Real and complex parts of the Index of Refraction
+    theta: angle between h and v
+*/
+RT_CALLABLE_PROGRAM float4x4 F_MuellerMatrix(float n, float k, float sinTheta, float cosTheta, float tanTheta)
+{
+    float n2 = n*n;
+    float k2 = k*k;
+    float st2 = sinTheta*sinTheta;
+
+    float left  = sqrt((n2 - k2 - st2)*(n2 - k2 - st2) + 4*n2*k2);
+    float right = n2 - k2 - st2;
+
+    float a2 = 0.5*(left + right);
+    float b2 = 0.5*(left - right);
+
+    float a = sqrt(a2);
+    float b = sqrt(max(b2,0.0));
+    float ct2 = cosTheta*cosTheta;
+
+    // orthogonal
+    float ortA = a2 + b2 + ct2;
+    float ortB = 2.0*a*cosTheta;
+
+    // parallel
+    float parA = a2 + b2 + st2*tanTheta*tanTheta;
+    float parB = 2.0*a*sinTheta*tanTheta;
+
+    // Fresnel parameters
+    float F_ort = (ortA - ortB)/(ortA + ortB);
+    float F_par = ((parA - parB)/(parA + parB))*F_ort;
+    float D_ort = atan((2*b*cosTheta)/(ct2 - a2 - b2));
+    float D_par = atan((2*cosTheta*((n2 - k2)*b - 2*n*k*a))/((n2 + k2)*(n2 + k2)*ct2 - a2 - b2));
+
+    float phaseDiff = D_ort - D_par;
+
+    // Matrix components
+    float A = 0.5*(F_ort + F_par);
+    float B = 0.5*(F_ort - F_par);
+    float C = cos(phaseDiff)*sqrt(F_ort*F_par);
+    float S = sin(phaseDiff)*sqrt(F_ort*F_par);
+
+    return float4x4(  A,   B, 0.0, 0.0,
+                      B,   A, 0.0, 0.0,
+                      0.0, 0.0,   C,   S,
+                      0.0, 0.0,  -S,   C);
+}
+/** Polarization sensitive Fresnel Function (F)
+*/
+RT_CALLABLE_PROGRAM MuellerData F_Polarizing(float metalness, float sinTheta, float cosTheta, float tanTheta)
+{
+    // Index of Refraction is not available in material textures so it is set from the constant buffer
+    float3 IoR_n = std::lerp(nonMetalIoRn, metalIoRn, metalness);        // = nonMetalIoR + metalness*(metalIoR-nonmetalIoR)
+    float3 IoR_k = metalness*metalIoRk; // k is zero for non-metals
+
+    MuellerData mdF;
+    mdF.mmR = F_MuellerMatrix(IoR_n.r, IoR_k.r, sinTheta, cosTheta, tanTheta);
+    mdF.mmG = F_MuellerMatrix(IoR_n.g, IoR_k.g, sinTheta, cosTheta, tanTheta);
+    mdF.mmB = F_MuellerMatrix(IoR_n.b, IoR_k.b, sinTheta, cosTheta, tanTheta);
+
+    return mdF;
+}
+
+// Computing the pdfSolidAngle of BRDF giving a direction
+// Lambertian Difuse, same as original in OptiX
 RT_CALLABLE_PROGRAM float LambertianPdf(const float3& L, const float3& N)
 {
     float NoL = fmaxf(dot(N, L), 0);
-    float pdf = NoL / M_PIf;
+    float pdf = NoL / M_PI;
     return fmaxf(pdf, 1e-14f);
 }
+// Old SpecularSpecular Relfection
+/**
 RT_CALLABLE_PROGRAM float SpecularPdf(const float3& L, const float3& V, const float3& N, float R)
 {
     float a2 = R * R * R * R;
     float3 H = normalize( (L+V) / 2.0 );
     float NoH = fmaxf(dot(N, H), 0);
     float VoH = fmaxf(dot(V, H), 0);
-    float pdf = (a2 * NoH) / fmaxf( (4 * M_PIf * (1 + (a2-1) * NoH)
+    float pdf = (a2 * NoH) / fmaxf( (4 * M_PI * (1 + (a2-1) * NoH)
             *(1 + (a2-1) * NoH) * VoH ), 1e-14f);
     return fmaxf(pdf, 1e-14f);
 }
+ **/
+// New Specular refrection
+/** Cook-Torrance Specular Term
+ * Ks= D*V*F
+ * the F term is the polarized one with the Mueller matrices
+ * the roughness=arccos(dot(N,H))
+ * N: surface normal
+ * H: half-angle vector
+ * L: light vector
+*/
+
+RT_CALLABLE_PROGRAM float D_GGX(float rough, const float3& N, const float3& H)
+{
+    float a2 = rough*rough*rough*rough;
+    float NdotH = fmaxf(dot(N,H), 0);
+    float d  = ((NdotH*a2 - NdotH)*NdotH + 1.0);
+    return a2/(M_PI*d*d);
+}
+
+/** Smith-GGX Visibility Function (V)
+    V = G/(4*NdotL*NdotV)
+*/
+RT_CALLABLE_PROGRAM float V_SmithGGX(const float3& N, const float3& L, const float3& V, float roughness)
+{
+    float a2 = roughness*roughness*roughness*roughness;
+    float NdotL = fmaxf(dot(N,L), 0);
+    float NdotV = fmaxf(dot(N,V), 0);
+    float ggxv = NdotL*sqrt((-NdotV*a2 + NdotV)*NdotV + a2);
+    float ggxl = NdotV*sqrt((-NdotL*a2 + NdotL)*NdotL + a2);
+    return 0.5/(ggxv + ggxl);
+}
+
+RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalness, const float3& N, const float3& L, const float3& V)
+{
+    float3 H = normalize((V + L)/2.0f);
+
+    float  D = D_GGX(roughness, N, H);
+    float  V = V_SmithGGX(N, L, V, roughness);
+
+    float sinTheta = length(cross(L, H));
+    float cosTheta = fmaxf(dot(L,H), 0); // used since (LdotH == VdotH)
+    float tanTheta = sinTheta/cosTheta;
+    float NdotL=fmaxf(dot(N,L), 0);
+
+    MuellerData F = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
+    MD_MUL_EQ_SCALAR(F, (D*V*NdotL));
+
+    return F;
+}
+/** Calculates the reflection Stokes components using the Cook-Torrance specular term
+*/
+// Not used
+StokesLight getReflectionData(const float3& N, const float3& L, const float3& V, const float3& originW,
+                              int hitDepth, float roughness, float metalness)
+{
+    // N is used instead of H since (N == H) for perfect reflections.
+    float NdotV = saturate(dot(N, V));
+
+    // Early exit if we're out of rays or if the surface is not facing the ray
+    if (hitDepth >= max_depth || NdotV <= 0.0 ) {
+        return unPolarizedLight(REFL_MISS_COLOR);
+    }
+
+    Payload rPayload = initPayload();
+
+    //RayDesc rRay;
+    //rRay.Origin = originW;
+    //rRay.Direction = reflect(-V, sd.N);   // ==L
+    //rRay.TMin = TMIN;
+    //rRay.TMax = TMAX;
+
+    float NdotL = fmaxf(dot(N, L));
+    float sinTheta = length(cross(L, N));
+    float cosTheta = NdotL;
+    float tanTheta = sinTheta/cosTheta;
+
+    float3 H=N;
+    float D = D_GGX(roughness, N, H); // NdotH=1.0 since (N == H)
+    float V = V_SmithGGX(N, L, V, roughness);
+
+    MuellerData reflectionBrdf = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
+    //saturate to prevent blown out colors
+    MD_MUL_EQ_SCALAR(reflectionBrdf, saturate(D*V*NdotL));
+
+    // Send a reflection ray into the scene
+    TraceRay(gRtScene, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, hitProgramCount, 0, rRay, rPayload);
+
+    // Align the incoming light's reference frame
+    float3 incomingRefX = computeX(sd.N, rRay.Direction);
+    rotateReferenceFrame(rPayload.lightData, incomingRefX, rRay.Direction);
+
+    // Multiply with the reflection BRDF Mueller matrices
+    SL_MUL_EQ_MD(rPayload.lightData, reflectionBrdf);
+
+    return rPayload.lightData;
+}
+// old pdf function
+/**
 RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float R)
 {
     float pdfLambertian = LambertianPdf(L, N);
     float pdfSpecular = SpecularPdf(L, V, N, R);
     return pdfLambertian * 0.5 + pdfSpecular * 0.5;
 }
+**/
+
+RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float roughness)
+{
+    float pdfLambertian = LambertianPdf(L, N);
+    MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
+
+}
+
 
 RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, const float rough, const float3& fresnel, 
         const float3& V, const float3& L, const float3& radiance)
@@ -137,10 +486,14 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, 
     float nom0 = NoH * NoH * (alpha2 - 1) + 1;
     float nom1 = NoV * (1 - k) + k;
     float nom2 = NoL * (1 - k) + k;
-    float nom = fmaxf(4 * M_PIf * nom0 * nom0 * nom1 * nom2, 1e-14);
+    float nom = fmaxf(4 * M_PI * nom0 * nom0 * nom1 * nom2, 1e-14);
     float3 spec = frac / nom;
          
-    float3 intensity = (albedoValue / M_PIf + spec) * NoL * radiance; 
+    float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
+
+    // Shoot a reflection ray
+    StokesLight reflectedLight = getReflectionData( N, L,  V,  originW, V, hitDepth, roughness,  metalness);
+    slAddEquals(hitData.lightData, reflectedLight, -rayDirW);
     return intensity;
 }
 
@@ -167,7 +520,7 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed,
     }
     else{
         // Compute the half angle 
-        float phi = 2 * M_PIf * z1;
+        float phi = 2 * M_PI * z1;
         float cosTheta = sqrt( (1 - z2) / (1 + (alpha2 - 1) * z2) );
         float sinTheta = sqrt( 1 - cosTheta * cosTheta);
 
