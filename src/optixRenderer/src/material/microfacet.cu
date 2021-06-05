@@ -139,7 +139,7 @@ RT_CALLABLE_PROGRAM StokesLight initStokes()
 
     return sl;
 }
-
+//TODO: will it detect rgb from float3 radiance ?
 RT_CALLABLE_PROGRAM StokesLight unPolarizedLight(float3 color)
 {
     StokesLight sl = initStokes();
@@ -384,7 +384,7 @@ RT_CALLABLE_PROGRAM float V_SmithGGX(const float3& N, const float3& L, const flo
     float ggxl = NdotV*sqrt((-NdotL*a2 + NdotL)*NdotL + a2);
     return 0.5/(ggxv + ggxl);
 }
-
+// returns the cookTorrance specular reflection ( not the mirror one)
 RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalness, const float3& N, const float3& L, const float3& V)
 {
     float3 H = normalize((V + L)/2.0f);
@@ -404,7 +404,7 @@ RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalnes
 }
 /** Calculates the reflection Stokes components using the Cook-Torrance specular term
 */
-// Not used
+/**
 StokesLight getReflectionData(const float3& N, const float3& L, const float3& V, const float3& originW,
                               int hitDepth, float roughness, float metalness)
 {
@@ -428,9 +428,9 @@ StokesLight getReflectionData(const float3& N, const float3& L, const float3& V,
     float sinTheta = length(cross(L, N));
     float cosTheta = NdotL;
     float tanTheta = sinTheta/cosTheta;
-
+    // mirror reflection
     float3 H=N;
-    float D = D_GGX(roughness, N, H); // NdotH=1.0 since (N == H)
+    float D = D_GGX(roughness, N, H); // NdotH=1.0 since N == H *(only for pure mirror reflection)
     float V = V_SmithGGX(N, L, V, roughness);
 
     MuellerData reflectionBrdf = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
@@ -449,6 +449,28 @@ StokesLight getReflectionData(const float3& N, const float3& L, const float3& V,
 
     return rPayload.lightData;
 }
+**/
+// this function calculates the mirror term of the light, which is algo polarized and in the form of a Mueller matrix
+RT_CALLABLE_PROGRAM MuellerData mirrorTerm (const float3& L, const float3& V, const float3& N, float roughness)
+{
+    // float pdfLambertian = LambertianPdf(L, N);
+    // MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
+    // calculation of the mirror term
+    float3 H=N;
+    float D = D_GGX(roughness, N, H); // NdotH=1.0 since (N == H)
+    float V = V_SmithGGX(N, L, V, roughness);
+    float NdotL = fmaxf(dot(N, L));
+    float sinTheta = length(cross(L, N));
+    float cosTheta = NdotL;
+    float tanTheta = sinTheta/cosTheta;
+
+    //saturate to prevent blown out colors
+    MuellerData reflectionBrdf = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
+    MD_MUL_EQ_SCALAR(reflectionBrdf, saturate(D*V*NdotL));
+
+}
+
+
 // old pdf function
 /**
 RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float R)
@@ -459,14 +481,22 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
 }
 **/
 
-RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float roughness)
+//(d) pdfLambertian: Lambertian Difuse relfection term ( no polarization)
+//(s) specMueller: cookTorrance specular reflection term (polarized in the Fresnel 'F' term)
+//(m) reflectionBrdf: mirror reflection term (also polarized in F), but now H==N
+
+// this function creates the pdf term of the prd_radiance, which is then in areaLight.cu and envmap.cu used to
+// calculate the intensity of light
+RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float roughness, float metalness)
 {
     float pdfLambertian = LambertianPdf(L, N);
     MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
 
+
 }
 
-
+// this function gets a ray data and returns the intensity of the light calculated
+/**
 RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, const float rough, const float3& fresnel, 
         const float3& V, const float3& L, const float3& radiance)
 {
@@ -481,7 +511,7 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, 
     float VoH = fmaxf(dot(V, H), 0);
 
     float FMi = (-5.55473 * VoH - 6.98316) * VoH;
-    float3 frac0 = fresnel + (1 - fresnel) * pow(2.0f, FMi);
+    float3 frac0 = fresnel + (1 - fresnel) * pow(2.0f, FMi); // fresnel term from Schlicks approximation
     float3 frac = frac0 * alpha2;
     float nom0 = NoH * NoH * (alpha2 - 1) + 1;
     float nom1 = NoV * (1 - k) + k;
@@ -491,12 +521,47 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, 
          
     float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
 
-    // Shoot a reflection ray
-    StokesLight reflectedLight = getReflectionData( N, L,  V,  originW, V, hitDepth, roughness,  metalness);
-    slAddEquals(hitData.lightData, reflectedLight, -rayDirW);
     return intensity;
 }
+ **/
+// new evaluate function with polarized specular term CookTorrance and unpolarized term Lambert-Difuse
+RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, const float rough, const float3& fresnel,
+                                    const float3& V, const float3& L, const float3& radiance, const float metalness)
+{
+    float alpha = rough * rough;
+    float k = (alpha + 2 * rough + 1) / 8.0;
+    float alpha2 = alpha * alpha;
 
+    float3 H = normalize((L + V) / 2.0f );
+    float NoL = fmaxf(dot(N, L), 0);
+    float NoV = fmaxf(dot(N, V), 0);
+    float NoH = fmaxf(dot(N, H), 0);
+    float VoH = fmaxf(dot(V, H), 0);
+
+    /* Diffuse component */
+    // Diffuse is unpolarized so calculations with a float3 is sufficient
+    float3 diffuseComp = LambertianPdf(L, N);
+
+    /* Specular component */
+    MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
+
+    // All light sources are unpolarized so no reference frame rotation needed before multiplication
+    StokesLight specularStokes = unPolarizedLight(radiance);
+    SL_MUL_EQ_MD(specularStokes, specularMueller);
+
+    // The output reference frame's Y vector lies in the specular reflection's plane of
+    // incidence so the microfacet normal H is used to calculate the X vector
+    specularStokes.referenceX = computeX(H, V);
+
+    // slAddEquals will rotate reference frame if needed
+    slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
+    SL_ADD_EQ_UNPOL( prd_radiance.lightData, diffuseComp);
+    float3 intensity = (prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x )
+    //float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
+
+    return intensity;
+}
+// this functions samples the new ray and calculates the spatial information of it
 RT_CALLABLE_PROGRAM void sample(unsigned& seed, 
         const float3& albedoValue, const float3& N, const float rough, const float3& fresnel, const float3& V,  
         const float3& ffnormal, 
@@ -576,8 +641,9 @@ RT_PROGRAM void closest_hit_radiance()
 
     float metallicValue = (isMetallicTexture == 0) ? metallic :
         tex2D(metallicMap, texcoord.x * uvScale, texcoord.y * uvScale).x;
-
-    float3 fresnel = F0 * (1 - metallicValue) + metallicValue * albedoValue;
+    //R0 or specular color, used later for Schlick's approximation for the Fresnel term, not needed since
+    // a polarized Fresnel term is used
+    float3 fresnel = F0 * (1 - metallicValue) + metallicValue * albedoValue; //albedoValue= C_base (base color)
     albedoValue = (1 - metallicValue) * albedoValue;
     
     float3 V = normalize(-ray.direction );    
@@ -621,7 +687,7 @@ RT_PROGRAM void closest_hit_radiance()
                 rtTrace(top_object, shadowRay, prd_shadow);
                 if(prd_shadow.inShadow == false)
                 {
-                    float3 intensity = evaluate(albedoValue, N, roughValue, fresnel, V, L, radiance) * cosPhi / Dist / Dist;
+                    float3 intensity = evaluate(albedoValue, N, roughValue, fresnel, V, L, radiance, metallicValue) * cosPhi / Dist / Dist;
                     
                     if(prd_radiance.depth == (max_depth - 1) ){
                     }
@@ -656,7 +722,7 @@ RT_PROGRAM void closest_hit_radiance()
                     prd_shadow.inShadow = false;
                     rtTrace(top_object, shadowRay, prd_shadow);
                     if(prd_shadow.inShadow == false && prd_radiance.depth != (max_depth - 1) ){
-                        float3 intensity = evaluate(albedoValue, N, roughValue, fresnel, V, L, radiance) / Dist/ Dist;
+                        float3 intensity = evaluate(albedoValue, N, roughValue, fresnel, V, L, radiance, metallicValue) / Dist/ Dist;
                         prd_radiance.radiance += intensity * prd_radiance.attenuation;
                     }
                 }
@@ -678,7 +744,7 @@ RT_PROGRAM void closest_hit_radiance()
                 rtTrace(top_object, shadowRay, prd_shadow);
                 if(prd_shadow.inShadow == false)
                 {
-                    float3 intensity = evaluate(albedoValue, N, roughValue, fresnel, V, L, radiance);
+                    float3 intensity = evaluate(albedoValue, N, roughValue, fresnel, V, L, radiance, metallicValue);
                     if(prd_radiance.depth == (max_depth - 1) ){
                     }
                     else{
