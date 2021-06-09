@@ -136,5 +136,12 @@ Material createMicrofacetMaterial(Context& context, material_t mat)
     material["metallicMap"] -> setTextureSampler(metallicSampler );
 
     material["F0"] -> setFloat(mat.fresnel);
+
+    //added code for other variables
+
+    material["intIOR"]->setFloat(1.33)
+    material["extIOR"]->setFloat(1.0)
+    material["filterangle"]->setFloat(45.0)
+
     return material;
 }
