@@ -318,10 +318,17 @@ RT_CALLABLE_PROGRAM float4x4 F_MuellerMatrix(float n, float k, float sinTheta, f
     float C = cos(phaseDiff)*sqrt(F_ort*F_par);
     float S = sin(phaseDiff)*sqrt(F_ort*F_par);
 
-    return float4x4(  A,   B, 0.0, 0.0,
+    /*return float4x4(  A,   B, 0.0, 0.0,
                       B,   A, 0.0, 0.0,
                       0.0, 0.0,   C,   S,
-                      0.0, 0.0,  -S,   C);
+                      0.0, 0.0,  -S,   C);*/
+    float4x4 result;
+    result.r0=(A, B, 0.0, 0.0);
+    result.r1=(B, A, 0.0, 0.0);
+    result.r2=(0.0, 0.0, C, S);
+    result.r3=(0.0, 0.0, -S, C);
+
+    return result;
 }
 /** Polarization sensitive Fresnel term (F)
 */
