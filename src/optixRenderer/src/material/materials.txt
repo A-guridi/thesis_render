@@ -1,0 +1,6 @@
+The possible materials are:
+-diffuse
+-microfacet
+-phong
+-dielectric
+-conductor
