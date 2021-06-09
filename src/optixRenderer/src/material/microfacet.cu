@@ -88,7 +88,6 @@ rtBuffer<Point> pointLights;
 #define M_INV_PI 0.3183098861837906715
 
 rtDeclareVariable(float, filterangle, , );
-rtDeclareVariable(int,  max_depth, , );
 rtDeclareVariable(float, intIOR, , );
 rtDeclareVariable(float, extIOR, , );
 
