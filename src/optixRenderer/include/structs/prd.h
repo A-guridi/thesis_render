@@ -29,6 +29,33 @@
 #pragma once
 
 #include <optixu/optixu_vector_types.h>
+// added structs of polarized light
+//struct representing a 4x4 matrix for the Mueller Data
+struct float4x4{
+    float4 r0;
+    float4 r1;
+    float4 r2;
+    float4 r3;
+};
+struct MuellerData
+{
+    // they are 4x4 matrices
+    // red, green, and blue Mueller matrices
+    float16 mmR;
+    float16 mmG;
+    float16 mmB;
+};
+
+struct StokesLight
+{
+    // red, green, and blue Stokes vectors
+    float4 svR;
+    float4 svG;
+    float4 svB;
+
+    // local coordinate system's x-axis unit vector
+    float3 referenceX;
+};
 
 struct PerRayData_radiance
 {
@@ -43,6 +70,8 @@ struct PerRayData_radiance
   float3 direction;
 
  float pdf;
+
+ StokesLight lightData;
 
 };
 
