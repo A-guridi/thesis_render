@@ -93,13 +93,13 @@ rtDeclareVariable(float, extIOR, , );
 
 rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 
-#define  filterCos2A=cos( 2*filterangle *M_PI/180);     // we keep the name as in the original renderer thesis
-#define  filterSin2A=sin( 2*filterangle *M_PI/180);
-#define filterEnabled=true;
+#define  filterCos2A    cos( 2*filterangle *M_PI/180);     // we keep the name as in the original renderer thesis
+#define  filterSin2A    sin( 2*filterangle *M_PI/180);
+#define filterEnabled   true;
 
-#define nonMetalIoRn = (intIOR, intIOR, intIOR); // the Index of Refraction, usually around 1.3-1.5 for glass materials
-#define metalIoRn = (0, 0 ,0); // non-metal
-#define metalIoRk = (0, 0, 0); // the complex part of the index is 0 for non-metallic materials
+#define nonMetalIoRn    make_float3(intIOR, intIOR, intIOR); // the Index of Refraction, usually around 1.3-1.5 for glass materials
+#define metalIoRn       make_float3(0, 0 ,0); // non-metal
+#define metalIoRk       make_float3(0, 0, 0); // the complex part of the index is 0 for non-metallic materials
 /**
  * Added Light Data structures
  */
@@ -115,33 +115,15 @@ rtDeclareVariable(
 //**************************************************************************************************
 // Data structures and initializer functions
 //**************************************************************************************************
-
-struct MuellerData
-{
-    // red, green, and blue Mueller matrices
-    float4x4 mmR;
-    float4x4 mmG;
-    float4x4 mmB;
-};
-
-struct StokesLight
-{
-    // red, green, and blue Stokes vectors
-    float4 svR;
-    float4 svG;
-    float4 svB;
-
-    // local coordinate system's x-axis unit vector
-    float3 referenceX;
-};
+//already declared in prd.h
 
 RT_CALLABLE_PROGRAM StokesLight initStokes()
 {
     StokesLight sl;
-    sl.svR = float4(0.0, 0.0, 0.0, 0.0);
-    sl.svG = float4(0.0, 0.0, 0.0, 0.0);
-    sl.svB = float4(0.0, 0.0, 0.0, 0.0);
-    sl.referenceX = float3(1.0, 0.0, 0.0);
+    sl.svR = make_float4(0.0, 0.0, 0.0, 0.0);
+    sl.svG = make_float4(0.0, 0.0, 0.0, 0.0);
+    sl.svB = make_float4(0.0, 0.0, 0.0, 0.0);
+    sl.referenceX = make_float3(1.0, 0.0, 0.0);
 
     return sl;
 }
@@ -149,32 +131,51 @@ RT_CALLABLE_PROGRAM StokesLight initStokes()
 RT_CALLABLE_PROGRAM StokesLight unPolarizedLight(float3 color)
 {
     StokesLight sl = initStokes();
-    sl.svR.x = color.r;
-    sl.svG.x = color.g;
-    sl.svB.x = color.b;
+    sl.svR.x = color.x;
+    sl.svG.x = color.y;
+    sl.svB.x = color.z;
     return sl;
 }
 
 RT_CALLABLE_PROGRAM float3 stokesToColor(StokesLight sl) {
-    return saturate(float3(sl.svR.x, sl.svG.x, sl.svB.x));
+    float3 r=make_float3(saturate(sl.svR.x), saturate(sl.svG.x), saturate(sl.svB.x));
+    return r;
 }
 //* operator for a light vector and a 4x4 matrix
-RT_CALLABLE_PROGRAM float3 vec_mat_multi(float4 vec, float4x4 mat) {
-    float4 col0=(mat.r0.x, mat.r1.x, mat.r2.x, mat.r3.x);
-    float4 col1=(mat.r0.y, mat.r1.y, mat.r2.y, mat.r3.y);
-    float4 col2=(mat.r0.z, mat.r1.z, mat.r2.z, mat.r3.z);
-    float4 col3=(mat.r0.w, mat.r1.w, mat.r2.w, mat.r3.w);
-    return (dot(vec, col0), dot(vec, col1), dot(vec, col2), dot(vec,col3) );
+RT_CALLABLE_PROGRAM float4 vec_mat_multi(float4 vec, float4x4 mat) {
+    float4 col0=make_float4(mat.r0.x, mat.r1.x, mat.r2.x, mat.r3.x);
+    float4 col1=make_float4(mat.r0.y, mat.r1.y, mat.r2.y, mat.r3.y);
+    float4 col2=make_float4(mat.r0.z, mat.r1.z, mat.r2.z, mat.r3.z);
+    float4 col3=make_float4(mat.r0.w, mat.r1.w, mat.r2.w, mat.r3.w);
+    return make_float4(dot(vec, col0), dot(vec, col1), dot(vec, col2), dot(vec,col3) );
 }
 //**************************************************************************************************
 // Operator macros for StokesLight and MuellerData
 //**************************************************************************************************
+//operator + for vector and constant
+#define ADD_VEC_CONST(v,c, r)   r.x=v.x+c; \
+                                r.y=v.y+c; \
+                                r.z=v.z+c  \
+
+#define ADD_2VEC(v1, v2, r)     r.x=v1.x+v2.x; \
+                                r.y=v1.y+v2.y; \
+                                r.z=v1.z+v2.z;
+
+//operator * for multiplication of a float and a vector
+#define MUL_VEC_CONST(v,c, r)   r.x=v.x*c; \
+                                r.y=v.y*c; \
+                                r.z=v.z*c; \
+
+//operator * for multiplication of 2 float3
+#define MUL_2VEC(v1, v2, r)     r.x=v1.x*v2.x; \
+                                r.y=v1.y*v2.y; \
+                                r.z=v1.z*v2.z;
 
 // operator += for StokesLight and unpolarized float3 color
 // unpolarized light can be added directly, no need to first create a Stokes vector for it
-#define SL_ADD_EQ_UNPOL(sl, c) sl.svR.x += c.r; \
-                               sl.svG.x += c.g; \
-                               sl.svB.x += c.b;
+#define SL_ADD_EQ_UNPOL(sl, c) sl.svR.x += c.x; \
+                               sl.svG.x += c.y; \
+                               sl.svB.x += c.z;
 
 // operator += for two already aligned StokesLight parameters
 #define SL_ADD_EQ_POL(sl_a, sl_b) sl_a.svR += sl_b.svR; \
@@ -222,8 +223,8 @@ RT_CALLABLE_PROGRAM void rotateStokes(float4 &S, float c2p, float s2p)
     float old_y = S.y;
     float old_z = S.z;
 
-    S.y =  c2p*old_y + s2p*old_z;
-    S.z = -s2p*old_y + c2p*old_z;
+    S.y =  float(c2p*old_y + s2p*old_z);
+    S.z = float(-s2p*old_y + c2p*old_z);
 }
 
 /** Rotate reference frame
@@ -260,12 +261,12 @@ RT_CALLABLE_PROGRAM void polarizeStokes(float4 &s)
 {
     const float a = filterCos2A;
     const float b = filterSin2A;
-    float3 oldXYZ = s.xyz;
+    float3 oldXYZ = make_float3(s.x, s.y, s.z);
 
-    s.x = dot(oldXYZ, float3(1.0,   a,   b));
-    s.y = dot(oldXYZ, float3(  a, a*a, a*b));
-    s.z = dot(oldXYZ, float3(  b, a*b, b*b));
-    s.w = 0.0;
+    s.x = float(dot(oldXYZ, make_float3(1.0,   a,   b)));
+    s.y = float(dot(oldXYZ, make_float3(  a, a*a, a*b)));
+    s.z = float(dot(oldXYZ, make_float3(  b, a*b, b*b)));
+    s.w = float(0.0);
 }
 
 /** Applies a horizontal polarizing filter that's been rotated clockwise by angle A
@@ -332,10 +333,10 @@ RT_CALLABLE_PROGRAM float4x4 F_MuellerMatrix(float n, float k, float sinTheta, f
                       0.0, 0.0,   C,   S,
                       0.0, 0.0,  -S,   C);*/
     float4x4 result;
-    result.r0=(A, B, 0.0, 0.0);
-    result.r1=(B, A, 0.0, 0.0);
-    result.r2=(0.0, 0.0, C, S);
-    result.r3=(0.0, 0.0, -S, C);
+    result.r0=make_float4(A, B, 0.0, 0.0);
+    result.r1=make_float4(B, A, 0.0, 0.0);
+    result.r2=make_float4(0.0, 0.0, C, S);
+    result.r3=make_float4(0.0, 0.0, -S, C);
 
     return result;
 }
@@ -344,13 +345,18 @@ RT_CALLABLE_PROGRAM float4x4 F_MuellerMatrix(float n, float k, float sinTheta, f
 RT_CALLABLE_PROGRAM MuellerData F_Polarizing(float metalness, float sinTheta, float cosTheta, float tanTheta)
 {
     // Index of Refraction is not available in material textures so it is set from the constant buffer
-    float3 IoR_n = std::lerp(nonMetalIoRn, metalIoRn, metalness);        // = nonMetalIoR + metalness*(metalIoR-nonmetalIoR)
-    float3 IoR_k = metalness*metalIoRk; // k is zero for non-metals
+    float3 r=make_float3(0.0);
+    ADD_2VEC(metalIoRn, -nonMetalIoRn, r);
+    MUL_VEC_CONST(r, metalness, r);
+    ADD_2VEC(nonMetalIoRn, metalIoRn);
+    float3 IoR_n = nonMetalIoRn;    //IoR_n = nonMetalIoRn + metalness*(metalIoRn-nonMetalIoRn);
+    MUL_VEC_CONST(metalIoRk, metalness)
+    float3 IoR_k = metalIoRk; // k is zero for non-metals
 
     MuellerData mdF;
-    mdF.mmR = F_MuellerMatrix(IoR_n.r, IoR_k.r, sinTheta, cosTheta, tanTheta);
-    mdF.mmG = F_MuellerMatrix(IoR_n.g, IoR_k.g, sinTheta, cosTheta, tanTheta);
-    mdF.mmB = F_MuellerMatrix(IoR_n.b, IoR_k.b, sinTheta, cosTheta, tanTheta);
+    mdF.mmR = F_MuellerMatrix(IoR_n.x, IoR_k.x, sinTheta, cosTheta, tanTheta);
+    mdF.mmG = F_MuellerMatrix(IoR_n.y, IoR_k.y, sinTheta, cosTheta, tanTheta);
+    mdF.mmB = F_MuellerMatrix(IoR_n.z, IoR_k.z, sinTheta, cosTheta, tanTheta);
 
     return mdF;
 }
@@ -797,11 +803,11 @@ RT_PROGRAM void closest_hit_radiance()
 
     // get the cameras reference and rotate the light according to it
     float3 cameraX  = computeX( cameraU, -ray.direction);
-    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+    rotateReferenceFrame(& prd_radiance.lightData, cameraX, -ray.direction);
 
     /* Apply polarizing filter */
     if (filterEnabled) {
-        applyPolarizingFilter(prd_radiance.lightData);
+        applyPolarizingFilter(& prd_radiance.lightData);
     }
 }
 
