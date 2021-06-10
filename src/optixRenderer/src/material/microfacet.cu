@@ -153,23 +153,25 @@ RT_CALLABLE_PROGRAM float4 vec_mat_multi(float4 vec, float4x4 mat) {
 // Operator macros for StokesLight and MuellerData
 //**************************************************************************************************
 //operator + for vector and constant
-#define ADD_VEC_CONST(v,c, r)   r.x=v.x+c; \
-                                r.y=v.y+c; \
-                                r.z=v.z+c  \
-
-#define ADD_2VEC(v1, v2, r)     r.x=v1.x+v2.x; \
-                                r.y=v1.y+v2.y; \
-                                r.z=v1.z+v2.z;
-
+RT_CALLABLE_PROGRAM float3 add_constant(const float3 &v, float c) {
+    float3 r=make_float3(v.x+c, v.y+c, v.z+c);
+    return r;
+}
+//operator + for two float3 vectors
+RT_CALLABLE_PROGRAM float3 add_vectors(const float3 &v1, const float3 &v2) {
+    return make_float3(v1.x+v2.x, v1.y+v2.y, v1.z+v2.z);
+    //return r;
+}
 //operator * for multiplication of a float and a vector
-#define MUL_VEC_CONST(v,c, r)   r.x=v.x*c; \
-                                r.y=v.y*c; \
-                                r.z=v.z*c; \
-
+RT_CALLABLE_PROGRAM float3 mult_constant(const float3 &v, float c) {
+    float3 r=make_float3(v.x*c, v.y*c, v.z*c);
+    return r;
+}
 //operator * for multiplication of 2 float3
-#define MUL_2VEC(v1, v2, r)     r.x=v1.x*v2.x; \
-                                r.y=v1.y*v2.y; \
-                                r.z=v1.z*v2.z;
+RT_CALLABLE_PROGRAM float3 mult_vectors(const float3 &v1, const float3 &v2) {
+    float3 r=make_float3(v1.x*v2.x, v1.y*v2.y, v1.z*v2.z);
+    return r;
+}
 
 // operator += for StokesLight and unpolarized float3 color
 // unpolarized light can be added directly, no need to first create a Stokes vector for it
@@ -345,13 +347,11 @@ RT_CALLABLE_PROGRAM float4x4 F_MuellerMatrix(float n, float k, float sinTheta, f
 RT_CALLABLE_PROGRAM MuellerData F_Polarizing(float metalness, float sinTheta, float cosTheta, float tanTheta)
 {
     // Index of Refraction is not available in material textures so it is set from the constant buffer
-    float3 r=make_float3(0.0);
-    ADD_2VEC(metalIoRn, -nonMetalIoRn, r);
-    MUL_VEC_CONST(r, metalness, r);
-    ADD_2VEC(nonMetalIoRn, metalIoRn);
-    float3 IoR_n = nonMetalIoRn;    //IoR_n = nonMetalIoRn + metalness*(metalIoRn-nonMetalIoRn);
-    MUL_VEC_CONST(metalIoRk, metalness)
-    float3 IoR_k = metalIoRk; // k is zero for non-metals
+    //IoR_n = nonMetalIoRn + metalness*(metalIoRn-nonMetalIoRn);
+    float3 difIoR = add_vectors(metalIoRn, -nonMetalIoRn);
+    float3 met_factor = mult_constant(difIoR, metalness);
+    float3 IoR_n = add_vectors(nonMetalIoRn, met_factor);
+    float3 IoR_k = mult_constant(metalIoRk, metalness); // k is zero for non-metals
 
     MuellerData mdF;
     mdF.mmR = F_MuellerMatrix(IoR_n.x, IoR_k.x, sinTheta, cosTheta, tanTheta);
