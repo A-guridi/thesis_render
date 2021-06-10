@@ -158,6 +158,14 @@ RT_CALLABLE_PROGRAM StokesLight unPolarizedLight(float3 color)
 RT_CALLABLE_PROGRAM float3 stokesToColor(StokesLight sl) {
     return saturate(float3(sl.svR.x, sl.svG.x, sl.svB.x));
 }
+//* operator for a light vector and a 4x4 matrix
+RT_CALLABLE_PROGRAM float3 vec_mat_multi(float4 vec, float4x4 mat) {
+    float4 col0=(mat.r0.x, mat.r1.x, mat.r2.x, mat.r3.x);
+    float4 col1=(mat.r0.y, mat.r1.y, mat.r2.y, mat.r3.y);
+    float4 col2=(mat.r0.z, mat.r1.z, mat.r2.z, mat.r3.z);
+    float4 col3=(mat.r0.w, mat.r1.w, mat.r2.w, mat.r3.w);
+    return (dot(vec, col0), dot(vec, col1), dot(vec, col2), dot(vec,col3) );
+}
 //**************************************************************************************************
 // Operator macros for StokesLight and MuellerData
 //**************************************************************************************************
@@ -173,10 +181,11 @@ RT_CALLABLE_PROGRAM float3 stokesToColor(StokesLight sl) {
                                   sl_a.svG += sl_b.svG; \
                                   sl_a.svB += sl_b.svB;
 
+
 // operator *= for StokesLight and MuellerData
-#define SL_MUL_EQ_MD(sl, md) sl.svR = mul(sl.svR, md.mmR); \
-                             sl.svG = mul(sl.svG, md.mmG); \
-                             sl.svB = mul(sl.svB, md.mmB);
+#define SL_MUL_EQ_MD(sl, md) sl.svR = vec_mat_multi(sl.svR, md.mmR); \
+                             sl.svG = vec_mat_multi(sl.svG, md.mmG); \
+                             sl.svB = vec_mat_multi(sl.svB, md.mmB);
 
 
 // operator *= for MuellerData and a scalar
@@ -512,9 +521,6 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
     // in this function we take those terms saved and add the mirror reflection to it
     MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness);
     SL_MUL_EQ_MD(prd_radiance.lightData, reflectionBrdf);
-
-
-
 }
 
 // this function gets a ray data and returns the intensity of the light calculated
