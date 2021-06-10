@@ -41,9 +41,9 @@ struct MuellerData
 {
     // they are 4x4 matrices
     // red, green, and blue Mueller matrices
-    float16 mmR;
-    float16 mmG;
-    float16 mmB;
+    float4x4 mmR;
+    float4x4 mmG;
+    float4x4 mmB;
 };
 
 struct StokesLight
