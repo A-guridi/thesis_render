@@ -57,6 +57,49 @@ Material createMicrofacetMaterial(Context& context, material_t mat)
                 std::min(mat.albedo[2] * mat.albedoScale[2], 1.0f ) );
     }
     material["albedoMap"] -> setTextureSampler(albedoSampler);
+
+    TextureSampler specularSampler = createTextureSampler(context);
+
+    if(mat.specular_texname != std::string("") ){
+        material["isSpecularTexture"] -> setInt(1);
+        cv::Mat specularTexture = cv::imread(mat.specular_texname, cv::IMREAD_COLOR);
+        if(specularTexture.empty() ){
+            std::cout<<"Wrong: unable to load the texture map: "<<mat.specular_texname<<"!"<<std::endl;
+            exit(1);
+        }
+        if(mat.specularScale[0] != 1 || mat.specularScale[1] != 1 || mat.specularScale[2] != 1){
+            for(int i = 0; i < specularTexture.rows; i++){
+                for(int j = 0; j < specularTexture.cols; j++){
+                    float b = specularTexture.at<cv::Vec3b>(i, j)[0];
+                    float g = specularTexture.at<cv::Vec3b>(i, j)[1];
+                    float r = specularTexture.at<cv::Vec3b>(i, j)[2];
+
+                    b = 255.0 * pow(pow(b / 255.0, 2.2f) * mat.specularScale[2], 1.0f / 2.2f);
+                    g = 255.0 * pow(pow(g / 255.0, 2.2f) * mat.specularScale[1], 1.0f / 2.2f);
+                    r = 255.0 * pow(pow(r / 255.0, 2.2f) * mat.specularScale[0], 1.0f / 2.2f);
+
+                    b = std::min(b, 255.0f);
+                    g = std::min(g, 255.0f);
+                    r = std::min(r, 255.0f);
+
+                    specularTexture.at<cv::Vec3b>(i, j)[0] = (unsigned char)b;
+                    specularTexture.at<cv::Vec3b>(i, j)[1] = (unsigned char)g;
+                    specularTexture.at<cv::Vec3b>(i, j)[2] = (unsigned char)r;
+                }
+            }
+        }
+        loadImageToTextureSampler(context, specularSampler, specularTexture );
+        material["specular"] -> setFloat(1.0, 1.0, 1.0);
+    }
+    else{
+        material["isSpecularTexture"] -> setInt(0);
+        loadEmptyToTextureSampler(context, specularSampler);
+        material["specular"] -> setFloat(
+                std::min(mat.specular[0] * mat.specularScale[0], 1.0f ),
+                std::min(mat.specular[1] * mat.specularScale[1], 1.0f ),
+                std::min(mat.specular[2] * mat.specularScale[2], 1.0f ) );
+    }
+    material["specularMap"] -> setTextureSampler(specularSampler);
    
     TextureSampler normalSampler = createTextureSampler(context );
     
@@ -139,9 +182,9 @@ Material createMicrofacetMaterial(Context& context, material_t mat)
 
     //added code for other variables
 
-    material["intIOR"]->setFloat(1.33)
-    material["extIOR"]->setFloat(1.0)
-    material["filterangle"]->setFloat(45.0)
+    material["intIOR"]->setFloat(1.33);
+    material["extIOR"]->setFloat(1.0);
+    material["filterangle"]->setFloat(45.0);
 
     return material;
 }
