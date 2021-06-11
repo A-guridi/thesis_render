@@ -93,13 +93,14 @@ rtDeclareVariable(float, extIOR, , );
 
 rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 
-#define  filterCos2A    cos( 2*filterangle *M_PI/180);     // we keep the name as in the original renderer thesis
-#define  filterSin2A    sin( 2*filterangle *M_PI/180);
+#define filterCos2A    cos( 2*filterangle *M_PI/180);     // we keep the name as in the original renderer thesis
+#define filterSin2A    sin( 2*filterangle *M_PI/180);
 #define filterEnabled   true;
 
-#define nonMetalIoRn    make_float3(intIOR, intIOR, intIOR); // the Index of Refraction, usually around 1.3-1.5 for glass materials
-#define metalIoRn       make_float3(0, 0 ,0); // non-metal
-#define metalIoRk       make_float3(0, 0, 0); // the complex part of the index is 0 for non-metallic materials
+//future note: dont use define for float3, does not work good
+//#define nonMetalIoRn make_float3(intIOR, intIOR, intIOR); // the Index of Refraction, usually around 1.3-1.5 for glass materials
+//#define metalIoRn make_float3(0.0); // non-metal
+//#define metalIoRk make_float3(0.0); // the complex part of the index is 0 for non-metallic materials
 /**
  * Added Light Data structures
  */
@@ -152,26 +153,6 @@ RT_CALLABLE_PROGRAM float4 vec_mat_multi(float4 vec, float4x4 mat) {
 //**************************************************************************************************
 // Operator macros for StokesLight and MuellerData
 //**************************************************************************************************
-//operator + for vector and constant
-RT_CALLABLE_PROGRAM float3 add_constant(const float3 &v, float c) {
-    float3 r=make_float3(v.x+c, v.y+c, v.z+c);
-    return r;
-}
-//operator + for two float3 vectors
-RT_CALLABLE_PROGRAM float3 add_vectors(const float3 &v1, const float3 &v2) {
-    return make_float3(v1.x+v2.x, v1.y+v2.y, v1.z+v2.z);
-    //return r;
-}
-//operator * for multiplication of a float and a vector
-RT_CALLABLE_PROGRAM float3 mult_constant(const float3 &v, float c) {
-    float3 r=make_float3(v.x*c, v.y*c, v.z*c);
-    return r;
-}
-//operator * for multiplication of 2 float3
-RT_CALLABLE_PROGRAM float3 mult_vectors(const float3 &v1, const float3 &v2) {
-    float3 r=make_float3(v1.x*v2.x, v1.y*v2.y, v1.z*v2.z);
-    return r;
-}
 
 // operator += for StokesLight and unpolarized float3 color
 // unpolarized light can be added directly, no need to first create a Stokes vector for it
@@ -348,10 +329,11 @@ RT_CALLABLE_PROGRAM MuellerData F_Polarizing(float metalness, float sinTheta, fl
 {
     // Index of Refraction is not available in material textures so it is set from the constant buffer
     //IoR_n = nonMetalIoRn + metalness*(metalIoRn-nonMetalIoRn);
-    float3 difIoR = add_vectors(metalIoRn, -nonMetalIoRn);
-    float3 met_factor = mult_constant(difIoR, metalness);
-    float3 IoR_n = add_vectors(nonMetalIoRn, met_factor);
-    float3 IoR_k = mult_constant(metalIoRk, metalness); // k is zero for non-metals
+    float3 metalIoRn=make_float3(0.0);
+    float3 nonMetalIoRn=make_float3(intIOR);
+    float3 metalIoRk=make_float3(0.0);
+    float3 IoR_n = nonMetalIoRn + metalness*(metalIoRn-nonMetalIoRn);
+    float3 IoR_k = metalIoRk * metalness; // k is zero for non-metals
 
     MuellerData mdF;
     mdF.mmR = F_MuellerMatrix(IoR_n.x, IoR_k.x, sinTheta, cosTheta, tanTheta);
@@ -419,15 +401,15 @@ RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalnes
     float3 H = normalize((V + L)/2.0f);
 
     float  D = D_GGX(roughness, N, H);
-    float  V = V_SmithGGX(N, L, V, roughness);
+    float  V_Smith = V_SmithGGX(N, L, V, roughness);
 
     float sinTheta = length(cross(L, H));
     float cosTheta = fmaxf(dot(L,H), 0); // used since (LdotH == VdotH)
     float tanTheta = sinTheta/cosTheta;
-    float NdotL=fmaxf(dot(N,L), 0);
+    float NdotL = fmaxf(dot(N,L), 0);
 
     MuellerData F = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
-    MD_MUL_EQ_SCALAR(F, (D*V*NdotL));
+    MD_MUL_EQ_SCALAR(F, (D*V_Smith*NdotL));
 
     return F;
 }
@@ -481,22 +463,22 @@ StokesLight getReflectionData(const float3& N, const float3& L, const float3& V,
 **/
 // this function calculates the mirror term of the light, which is algo polarized and in the form of a Mueller matrix
 // the mirror term is the same as the CookTorrance specular term, but now H=N
-RT_CALLABLE_PROGRAM MuellerData mirrorTerm (const float3& L, const float3& V, const float3& N, float roughness)
+RT_CALLABLE_PROGRAM MuellerData mirrorTerm (const float3& L, const float3& V, const float3& N, float roughness, float metalness)
 {
     // float pdfLambertian = LambertianPdf(L, N);
     // MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
     // calculation of the mirror term
     float3 H=N;
     float D = D_GGX(roughness, N, H); // NdotH=1.0 since (N == H)
-    float V = V_SmithGGX(N, L, V, roughness);
-    float NdotL = fmaxf(dot(N, L));
+    float V_Smith = V_SmithGGX(N, L, V, roughness);
+    float NdotL = fmaxf(dot(N, L), 1e-14);
     float sinTheta = length(cross(L, N));
     float cosTheta = NdotL;
     float tanTheta = sinTheta/cosTheta;
 
     //saturate to prevent blown out colors
     MuellerData reflectionBrdf = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
-    MD_MUL_EQ_SCALAR(reflectionBrdf, saturate(D*V*NdotL));
+    MD_MUL_EQ_SCALAR(reflectionBrdf, saturate(D*V_Smith*NdotL));
     return reflectionBrdf;
 
 }
@@ -518,14 +500,14 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
 
 // this function creates the pdf term of the prd_radiance, which is then in areaLight.cu and envmap.cu used to
 // calculate the intensity of light
-RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float roughness)
+RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float roughness, float metalness)
 {
     // the difuse and specular terms are added in the evaluate function for each ray
     //float pdfLambertian = LambertianPdf(L, N);
     //MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
 
     // in this function we take those terms saved and add the mirror reflection to it
-    MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness);
+    MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
     SL_MUL_EQ_MD(prd_radiance.lightData, reflectionBrdf);
 }
 
@@ -574,7 +556,8 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, 
 
     /* Diffuse component */
     // Diffuse is unpolarized so calculations with a float3 is sufficient
-    float3 diffuseComp = LambertianPdf(L, N);
+    //float or float3 ?
+    float3 diffuseComp = make_float3(LambertianPdf(L, N));
 
     /* Specular component */
     MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
@@ -590,14 +573,14 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, 
     // slAddEquals will rotate reference frame if needed
     slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
     SL_ADD_EQ_UNPOL( prd_radiance.lightData, diffuseComp);
-    float3 intensity = ( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x )
+    float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
     //float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
 
     return intensity;
 }
 // this functions samples the new ray and calculates the spatial information of it
 RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const float3& N, const float rough,
-                                const float3& fresnel, const float3& V, const float3& ffnormal,
+                                const float metalness ,const float3& fresnel, const float3& V, const float3& ffnormal,
                                 optix::Onb onb, float3& attenuation, float3& direction, float& pdfSolid)
 {
     const float z1 = rnd( seed );
@@ -650,7 +633,7 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     // initialize the ray stokes information
     initPayload();
     //calculate the pdf term
-    pdfSolid = pdf(L, V, N, rough);
+    pdfSolid = pdf(L, V, N, rough, metalness);
 }
 
 
@@ -797,7 +780,7 @@ RT_PROGRAM void closest_hit_radiance()
 
     // Sammple the new ray 
     sample(prd_radiance.seed, 
-        albedoValue, N, fmaxf(roughValue, 0.02), fresnel, V,
+        albedoValue, N, fmaxf(roughValue, 0.02), metallicValue, fresnel, V,
         ffnormal, onb, 
         prd_radiance.attenuation, prd_radiance.direction, prd_radiance.pdf );
 
