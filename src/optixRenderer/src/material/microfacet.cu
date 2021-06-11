@@ -508,7 +508,7 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
 
     // in this function we take those terms saved and add the mirror reflection to it
     MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
-    SL_MUL_EQ_MD(prd_radiance.lightData, reflectionBrdf);
+    SL_MUL_EQ_MD(prd_radiance.lightData, mirrorMUeller);
 }
 
 // this function gets a ray data and returns the intensity of the light calculated
