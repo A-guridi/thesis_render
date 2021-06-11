@@ -79,3 +79,42 @@ struct PerRayData_shadow
 {
     bool inShadow;
 };
+
+//operators for 4x4 matrices
+
+inline __host__ __device__ float4x4 operator+(float4x4 a, float4x4 b)
+{
+    float4x4 res;
+    res.r0=a.r0+b.r0;
+    res.r1=a.r1+b.r1;
+    res.r2=a.r2+b.r2;
+    res.r3=a.r3+b.r3;
+    return res;
+}
+//operator + for 4x4 and consant
+inline __host__ __device__ float4x4 operator+(float4x4 a, float b)
+{
+    float4x4 res;
+    res.r0=a.r0+b;
+    res.r1=a.r1+b;
+    res.r2=a.r2+b;
+    res.r3=a.r3+b;
+    return res;
+}
+//operator * for 4x4 and constant
+inline __host__ __device__ float4x4 operator*(float4x4 a, float b)
+{
+    float4x4 res;
+    res.r0=a.r0*b;
+    res.r1=a.r1*b;
+    res.r2=a.r2*b;
+    res.r3=a.r3*b;
+    return res;
+}
+inline __host__ __device__ void operator*=(float4x4 &a, float b)
+{
+    a.r0*=b;
+    a.r1*=b;
+    a.r2*=b;
+    a.r3*=b;
+}
