@@ -184,7 +184,7 @@ Material createMicrofacetMaterial(Context& context, material_t mat)
 
     material["intIOR"]->setFloat(1.33);
     material["extIOR"]->setFloat(1.0);
-    material["filterangle"]->setFloat(45.0);
+    material["filterangle"]->setFloat(90.0);
 
     return material;
 }
