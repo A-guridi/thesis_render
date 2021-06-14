@@ -546,11 +546,6 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& spe
     /* Diffuse component */
     // Diffuse is unpolarized so calculations with a float3 is sufficient
 
-    float3 cameraX  = computeX( cameraU, -ray.direction);
-    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
-    /* Apply polarizing filter */
-    applyPolarizingFilter(prd_radiance.lightData);
-
     float diffuseComp = LambertianPdf(L, N);
     float3 difusseLight = albedoValue*diffuseComp;
 
@@ -573,7 +568,6 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& spe
 
     //the intensity is a float3 vector with the values of RGB and the radiance is the intensity of each channel (how bright)
     //return intensity*radiance;
-    //float3 specularTerm = specularValue / (2*M_PI) * (2 + 2) * pow(VoH, fmaxf(0, 1e-14) );
     return intensity * radiance;
     //return intensity;
 }
@@ -791,7 +785,12 @@ RT_PROGRAM void closest_hit_radiance()
         ffnormal, onb,
         prd_radiance.attenuation, prd_radiance.direction, prd_radiance.pdf );
 
-
+    float3 cameraX  = computeX( cameraU, -ray.direction);
+    StokesLight pay_radiance=unPolarizedLight(prd_radiance.radiance);
+    rotateReferenceFrame(pay_radiance, cameraX, -ray.direction);
+    /* Apply polarizing filter */
+    applyPolarizingFilter(pay_radiance);
+    prd_radiance.radiance=stokesToColor(pay_radiance);
 }
 
 // any_hit_shadow program for every material include the lighting should be the same
