@@ -508,15 +508,20 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
     // the difuse and specular terms are added in the evaluate function for each ray
     float pdfLambertian = LambertianPdf(L, N);
     MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
+    StokesLight specularStokes = unPolarizedLight(radiance);
+    SL_MUL_EQ_MD(specularStokes, specMueller);
 
     // in this function we take those terms saved and add the mirror reflection to it
-    // MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
+    MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
+    StokesLight mirrorStokes = unPolarizedLight(radiance);
+    SL_MUL_EQ_MD(mirrorStokes, mirrorMueller);
     //SL_MUL_EQ_MD(prd_radiance.lightData, mirrorMueller);
-    SL_MUL_EQ_MD(prd_radiance.lightData, specMueller);
+    //SL_MUL_EQ_MD(prd_radiance.lightData, specMueller);
+    SL_ADD_EQ_POL(specularStokes, mirrorStokes);
 
-    float3 new_intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
+    float3 new_intensity = make_float3( specularStokes.svR.x, specularStokes.svG.x, specularStokes.svB.x );
     //we return the modulo of the intensity vector of the light as the BRDF
-    new_intensity*=pdfLambertian;
+    //new_intensity*=pdfLambertian;
     return length(new_intensity);
 }
 
@@ -539,29 +544,29 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& spe
     /* Diffuse component */
     // Diffuse is unpolarized so calculations with a float3 is sufficient
     float diffuseComp = LambertianPdf(L, N);
-    float3 difusseLight = (albedoValue/M_PI);
+    float3 difusseLight = albedoValue*diffuseComp;
 
     /* Specular component */
-    //MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
+    MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
 
     // All light sources are unpolarized so no reference frame rotation needed before multiplication
-    //StokesLight specularStokes = unPolarizedLight(specularValue);
-    //SL_MUL_EQ_MD(specularStokes, specularMueller);
+    StokesLight specularStokes = unPolarizedLight(specularValue);
+    SL_MUL_EQ_MD(specularStokes, specularMueller);
 
     // The output reference frame's Y vector lies in the specular reflection's plane of
     // incidence so the microfacet normal H is used to calculate the X vector
-    //specularStokes.referenceX = computeX(H, V);
+    specularStokes.referenceX = computeX(H, V);
 
     // slAddEquals will rotate reference frame if needed
-    //slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
-    //SL_ADD_EQ_UNPOL( prd_radiance.lightData, difusseLight);
-    //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
-    //float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
+    slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
+    SL_ADD_EQ_UNPOL( prd_radiance.lightData, difusseLight);
+    float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
 
     //the intensity is a float3 vector with the values of RGB and the radiance is the intensity of each channel (how bright)
     //return intensity*radiance;
-    float3 specularTerm = specularValue / (2*M_PI) * (2 + 2) * pow(VoH, fmaxf(0, 1e-14) );
-    return (difusseLight + specularTerm) * radiance * NoL;
+    //float3 specularTerm = specularValue / (2*M_PI) * (2 + 2) * pow(VoH, fmaxf(0, 1e-14) );
+    return intensity * radiance;
+    //return intensity;
 }
 // this functions samples the new ray and calculates the spatial information of it
 RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const float3& N, const float rough,
@@ -661,7 +666,6 @@ RT_PROGRAM void closest_hit_radiance()
         specularValue.y = pow(specularValue.y, 2.2);
         specularValue.z = pow(specularValue.z, 2.2);
     }
-
 
 
     float3 colorSum = fmaxf(albedoValue + specularValue, make_float3(1e-14f) );
