@@ -26,7 +26,7 @@
 	<bsdf type="microfacet" id="white">
         <rgb name="albedo" value="1.0 1.0 1.0"/>
         <rgb name="albedoScale" value="0.5 0.5 0.5"/>
-        <float name="roughnessScale" value="0.0" />
+        <float name="roughnessScale" value="1.0" />
     </bsdf>
 
 	<bsdf type="diffuse" id="red">

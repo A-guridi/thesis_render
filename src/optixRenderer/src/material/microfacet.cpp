@@ -2,7 +2,7 @@
 #include <algorithm>
 
 
-Material createMicrofacetMaterial(Context& context, material_t mat)
+Material createMicrofacetMaterial(Context& context, material_t mat, float pol_angle)
 {
     const std::string ptx_path = ptxPath( "microfacet.cu" );
     Program ch_program = context->createProgramFromPTXFile( ptx_path, "closest_hit_radiance" );
@@ -184,7 +184,7 @@ Material createMicrofacetMaterial(Context& context, material_t mat)
 
     material["intIOR"]->setFloat(1.33);
     material["extIOR"]->setFloat(1.0);
-    material["filterangle"]->setFloat(90.0);
+    material["filterangle"]->setFloat(pol_angle);
 
     return material;
 }
