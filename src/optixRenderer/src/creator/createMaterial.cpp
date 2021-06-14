@@ -31,7 +31,7 @@ Material createDefaultMaterial(Context& context ){
     TextureSampler specularSampler = createTextureSampler(context);
     material["isSpecularTexture"] -> setInt(0);
     loadEmptyToTextureSampler(context, specularSampler);
-    material["specular"] -> setFloat(0.2, 0.2, 0.2 );
+    material["specular"] -> setFloat(0.8, 0.8, 0.8 );
     material["specularMap"] -> setTextureSampler(specularSampler);
         
     TextureSampler roughSampler = createTextureSampler(context);
