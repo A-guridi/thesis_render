@@ -717,6 +717,7 @@ RT_PROGRAM void closest_hit_radiance()
                 Ray shadowRay = make_Ray(hitPoint, L, 1, scene_epsilon, Dist - scene_epsilon);
                 PerRayData_shadow prd_shadow; 
                 prd_shadow.inShadow = false;
+                initPayload();
                 rtTrace(top_object, shadowRay, prd_shadow);
                 if(prd_shadow.inShadow == false)
                 {
@@ -732,10 +733,9 @@ RT_PROGRAM void closest_hit_radiance()
 
                         prd_radiance.radiance += intensity * pdfAreaLight / 
                             fmaxf(pdfAreaBRDF2 + pdfAreaLight2, 1e-14) * prd_radiance.attenuation;            
-                    }
-                    float3 cameraX  = computeX( cameraU, -ray.direction);
-                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
-
+                        }
+                    float3 cameraX  = computeX( cameraU, -shadowRay.direction);
+                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -shadowRay.direction);
                     /* Apply polarizing filter */
                     applyPolarizingFilter(prd_radiance.lightData);
                 }
@@ -754,7 +754,7 @@ RT_PROGRAM void closest_hit_radiance()
                 float3 radiance = pointLights[i].intensity;
                 float3 L = normalize(position - hitPoint);
                 float Dist = length(position - hitPoint);
-
+                initPayload();
                 if( fmaxf(dot(ffnormal, L), 0.0f) * fmaxf(dot(ffnormal, V), 0.0f) > 0.0025){
                     Ray shadowRay = make_Ray(hitPoint + 0.1 * L * scene_epsilon, L, 1, scene_epsilon, Dist - scene_epsilon);
                     PerRayData_shadow prd_shadow; 
@@ -764,9 +764,8 @@ RT_PROGRAM void closest_hit_radiance()
                         float3 intensity = evaluate(albedoValue, specularValue, N, roughValue, fresnel, V, L, radiance, metallicValue) / Dist/ Dist;
                         prd_radiance.radiance += intensity * prd_radiance.attenuation;
                     }
-                    float3 cameraX  = computeX( cameraU, -ray.direction);
-                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
-
+                    float3 cameraX  = computeX( cameraU, -shadowRay.direction);
+                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -shadowRay.direction);
                     /* Apply polarizing filter */
                     applyPolarizingFilter(prd_radiance.lightData);
                 }
@@ -786,6 +785,7 @@ RT_PROGRAM void closest_hit_radiance()
                 Ray shadowRay = make_Ray(hitPoint + 0.1 * scene_epsilon * L, L, 1, scene_epsilon, infiniteFar);
                 PerRayData_shadow prd_shadow;
                 prd_shadow.inShadow = false;
+                initPayload();
                 rtTrace(top_object, shadowRay, prd_shadow);
                 if(prd_shadow.inShadow == false)
                 {
@@ -799,8 +799,8 @@ RT_PROGRAM void closest_hit_radiance()
                         prd_radiance.radiance += intensity * pdfSolidEnv / 
                             fmaxf(pdfSolidEnv2 + pdfSolidBRDF2, 1e-14) * prd_radiance.attenuation; 
                     }
-                    float3 cameraX  = computeX( cameraU, -ray.direction);
-                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+                    float3 cameraX  = computeX( cameraU, -shadowRay.direction);
+                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -shadowRay.direction);
                     /* Apply polarizing filter */
                     applyPolarizingFilter(prd_radiance.lightData);
                     }
@@ -808,7 +808,6 @@ RT_PROGRAM void closest_hit_radiance()
             }
         }
     }
-
 
     // Sammple the new ray 
     sample(prd_radiance.seed, 
