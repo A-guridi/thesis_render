@@ -306,6 +306,8 @@ int main( int argc, char** argv )
 
     Context context = 0;
 
+    float polarization_angle=0.0;
+
     for(int i = 0; i < argc; i++){
         if(i == 0){
             continue;
@@ -323,6 +325,13 @@ int main( int argc, char** argv )
                 exit(1);
             }
             outputFileName = std::string(argv[++i] );
+        }
+        else if(std::string(argv[i] ) == std::string("-angle") ){
+            if(i == argc - 1){
+                std::cout<<"Missing input variable"<<std::endl;
+                exit(1);
+            }
+            polarization_angle=std::stof(argv[++i]);
         }
         else if(std::string(argv[i]) == std::string("-m") ) {
             if(i == argc - 1){
@@ -524,7 +533,7 @@ int main( int argc, char** argv )
         context -> setDevices(gpuIds.begin(), gpuIds.end() );
     }
     boundingBox(context, shapes);
-    createGeometry(context, shapes, materials, mode);
+    createGeometry(context, shapes, materials, mode, polarization_angle);
     createAreaLightsBuffer(context, shapes);
     createEnvmap(context, envmaps); 
     createPointLight(context, points);

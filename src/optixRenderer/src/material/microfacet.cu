@@ -506,46 +506,22 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
                               const float3& radiance)
 {
     // the difuse and specular terms are added in the evaluate function for each ray
-    //float pdfLambertian = LambertianPdf(L, N);
-    //MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
+    float pdfLambertian = LambertianPdf(L, N);
+    MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
 
     // in this function we take those terms saved and add the mirror reflection to it
-    MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
-    SL_MUL_EQ_MD(prd_radiance.lightData, mirrorMueller);
+    // MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
+    //SL_MUL_EQ_MD(prd_radiance.lightData, mirrorMueller);
+    SL_MUL_EQ_MD(prd_radiance.lightData, specMueller);
+
     float3 new_intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
     //we return the modulo of the intensity vector of the light as the BRDF
-    return length(new_intensity*radiance);
+    new_intensity*=pdfLambertian;
+    return length(new_intensity);
 }
 
 // this function gets a ray data and returns the intensity of the light calculated
-/**
-RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& N, const float rough, const float3& fresnel, 
-        const float3& V, const float3& L, const float3& radiance)
-{
-    float alpha = rough * rough;
-    float k = (alpha + 2 * rough + 1) / 8.0;
-    float alpha2 = alpha * alpha;
-    
-    float3 H = normalize((L + V) / 2.0f );
-    float NoL = fmaxf(dot(N, L), 0);
-    float NoV = fmaxf(dot(N, V), 0);
-    float NoH = fmaxf(dot(N, H), 0);
-    float VoH = fmaxf(dot(V, H), 0);
 
-    float FMi = (-5.55473 * VoH - 6.98316) * VoH;
-    float3 frac0 = fresnel + (1 - fresnel) * pow(2.0f, FMi); // fresnel term from Schlicks approximation
-    float3 frac = frac0 * alpha2;
-    float nom0 = NoH * NoH * (alpha2 - 1) + 1;
-    float nom1 = NoV * (1 - k) + k;
-    float nom2 = NoL * (1 - k) + k;
-    float nom = fmaxf(4 * M_PI * nom0 * nom0 * nom1 * nom2, 1e-14);
-    float3 spec = frac / nom;
-         
-    float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
-
-    return intensity;
-}
- **/
 // new evaluate function with polarized specular term CookTorrance and unpolarized term Lambert-Difuse
 RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& specularValue, const float3& N, const float rough, const float3& fresnel,
                                     const float3& V, const float3& L, const float3& radiance, const float metalness)
@@ -563,27 +539,29 @@ RT_CALLABLE_PROGRAM float3 evaluate(const float3& albedoValue, const float3& spe
     /* Diffuse component */
     // Diffuse is unpolarized so calculations with a float3 is sufficient
     float diffuseComp = LambertianPdf(L, N);
-    float3 difusseLight = (albedoValue/M_PI)*diffuseComp;
+    float3 difusseLight = (albedoValue/M_PI);
 
     /* Specular component */
-    MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
+    //MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
 
     // All light sources are unpolarized so no reference frame rotation needed before multiplication
-    StokesLight specularStokes = unPolarizedLight(specularValue);
-    SL_MUL_EQ_MD(specularStokes, specularMueller);
+    //StokesLight specularStokes = unPolarizedLight(specularValue);
+    //SL_MUL_EQ_MD(specularStokes, specularMueller);
 
     // The output reference frame's Y vector lies in the specular reflection's plane of
     // incidence so the microfacet normal H is used to calculate the X vector
-    specularStokes.referenceX = computeX(H, V);
+    //specularStokes.referenceX = computeX(H, V);
 
     // slAddEquals will rotate reference frame if needed
-    slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
-    SL_ADD_EQ_UNPOL( prd_radiance.lightData, difusseLight);
-    float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
+    //slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
+    //SL_ADD_EQ_UNPOL( prd_radiance.lightData, difusseLight);
+    //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
     //float3 intensity = (albedoValue / M_PI + spec) * NoL * radiance;
 
     //the intensity is a float3 vector with the values of RGB and the radiance is the intensity of each channel (how bright)
-    return intensity*radiance;
+    //return intensity*radiance;
+    float3 specularTerm = specularValue / (2*M_PI) * (2 + 2) * pow(VoH, fmaxf(0, 1e-14) );
+    return (difusseLight + specularTerm) * radiance * NoL;
 }
 // this functions samples the new ray and calculates the spatial information of it
 RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const float3& N, const float rough,
