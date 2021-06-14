@@ -625,7 +625,7 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     //calculate the pdf term
     float3 init_radiance=make_float3(1.0);
     pdfSolid = pdf(L, V, N, rough, metalness, init_radiance);
-}
+    // get the cameras reference and rotate the light according to it
 
 
 RT_PROGRAM void closest_hit_radiance()
@@ -733,6 +733,12 @@ RT_PROGRAM void closest_hit_radiance()
                         prd_radiance.radiance += intensity * pdfAreaLight / 
                             fmaxf(pdfAreaBRDF2 + pdfAreaLight2, 1e-14) * prd_radiance.attenuation;            
                     }
+                    float3 cameraX  = computeX( cameraU, -ray.direction);
+                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+
+                    /* Apply polarizing filter */
+                    applyPolarizingFilter(prd_radiance.lightData);
+                }
                 }
             }
         }   
@@ -758,6 +764,12 @@ RT_PROGRAM void closest_hit_radiance()
                         float3 intensity = evaluate(albedoValue, specularValue, N, roughValue, fresnel, V, L, radiance, metallicValue) / Dist/ Dist;
                         prd_radiance.radiance += intensity * prd_radiance.attenuation;
                     }
+                    float3 cameraX  = computeX( cameraU, -ray.direction);
+                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+
+                    /* Apply polarizing filter */
+                    applyPolarizingFilter(prd_radiance.lightData);
+                }
                 }
             }
         }
@@ -787,6 +799,11 @@ RT_PROGRAM void closest_hit_radiance()
                         prd_radiance.radiance += intensity * pdfSolidEnv / 
                             fmaxf(pdfSolidEnv2 + pdfSolidBRDF2, 1e-14) * prd_radiance.attenuation; 
                     }
+                    float3 cameraX  = computeX( cameraU, -ray.direction);
+                    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+                    /* Apply polarizing filter */
+                    applyPolarizingFilter(prd_radiance.lightData);
+                    }
                 }
             }
         }
@@ -799,12 +816,6 @@ RT_PROGRAM void closest_hit_radiance()
         ffnormal, onb, 
         prd_radiance.attenuation, prd_radiance.direction, prd_radiance.pdf );
 
-    // get the cameras reference and rotate the light according to it
-    float3 cameraX  = computeX( cameraU, -ray.direction);
-    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
-
-    /* Apply polarizing filter */
-    applyPolarizingFilter(prd_radiance.lightData);
 
 }
 
