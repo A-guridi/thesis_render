@@ -113,7 +113,8 @@ void createGeometry(
         Context& context,
         const std::vector<shape_t>& shapes,
         const std::vector<material_t>& materials,
-        int mode
+        int mode,
+        float pol_angle
         )
 {
     // Create geometry group;
@@ -222,7 +223,7 @@ void createGeometry(
                             mat = createDiffuseMaterial(context, matInput );
                         }
                         else if(matInput.cls == std::string("microfacet") ){
-                            mat = createMicrofacetMaterial(context, matInput );
+                            mat = createMicrofacetMaterial(context, matInput, pol_angle );
                         }
                         else if(matInput.cls == std::string("phong") ){
                             mat = createPhongMaterial(context, matInput );
