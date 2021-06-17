@@ -259,7 +259,7 @@ RT_CALLABLE_PROGRAM void polarizeStokes(float4 &s)
     s.z = float(dot(oldXYZ, make_float3(  b, a*b, b*b)));
     s.w = float(0.0);
 
-    s*=2.0;
+    //s*=2.0;
 }
 
 /** Applies a horizontal polarizing filter that's been rotated clockwise by angle A
@@ -510,18 +510,18 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
 // calculate the intensity of light
 //this pdf is also known as the Bidirectional Reflectance Distribution Function (BRDF)
 RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N, float roughness, float metalness,
-                              const float3& radiance)
+                              const float3& albedoValue, const float3& specularValue)
 {
     // the difuse and specular terms are added in the evaluate function for each ray
-    float3 new_rad=radiance;
     float pdfLambertian = LambertianPdf(L, N);
+    float3 diffuseLight = pdfLambertian * albedoValue;
     MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
-    StokesLight specularStokes = unPolarizedLight(new_rad);
+    StokesLight specularStokes = unPolarizedLight(specularValue);
     SL_MUL_EQ_MD(specularStokes, specMueller);
 
     // in this function we take those terms saved and add the mirror reflection to it
     MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
-    StokesLight mirrorStokes = unPolarizedLight(new_rad);
+    StokesLight mirrorStokes = unPolarizedLight(specularValue);
     SL_MUL_EQ_MD(mirrorStokes, mirrorMueller);
     //SL_MUL_EQ_MD(prd_radiance.lightData, mirrorMueller);
     //SL_MUL_EQ_MD(prd_radiance.lightData, specMueller);
@@ -529,7 +529,7 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
 
     float3 new_intensity = make_float3( specularStokes.svR.x, specularStokes.svG.x, specularStokes.svB.x );
     //we return the modulo of the intensity vector of the light as the BRDF
-    return length(new_intensity*pdfLambertian);
+    return length(new_intensity*diffuseLight);
 }
 
 // this function gets a ray data and returns the intensity of the light calculated
@@ -564,8 +564,7 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     // The output reference frame's Y vector lies in the specular reflection's plane of
     // incidence so the microfacet normal H is used to calculate the X vector
     specularStokes.referenceX = computeX(H, V);
-
-    StokesLight reflight = initStokes();
+    rotateReferenceFrame(specularStokes, specularStokes.referenceX, -ray.direction);
 
     // slAddEquals will rotate reference frame if needed
     //slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
@@ -579,7 +578,8 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     //the intensity is a float3 vector with the values of RGB and the radiance is the intensity of each channel (how bright)
     //return intensity * radiance;
     //return intensity;
-    return reflight;
+    SL_MUL_EQ_POL(specularStokes, radiance);
+    return specularStokes;
 }
 // this functions samples the new ray and calculates the spatial information of it
 RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const float3& specularValue, const float3& N, const float rough,
@@ -617,11 +617,16 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     }
 
     //calculate the pdf term
-    float3 init_radiance = make_float3(1.0);
-    pdfSolid = pdf(L, V, N, rough, metalness, init_radiance);
-    // get the cameras reference and rotate the light according to it
+    pdfSolid = pdf(L, V, N, rough, metalness, albedoValue, specularValue);
+
+    // add the mirror term
+    MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
+    StokesLight mirrorLight=unPolarizedLight(specularValue);
+    SL_MUL_EQ_MD(mirrorLight, mirrorRay);
+    slAddEquals(prd_radiance.lightData, mirrorLight, -ray.direction);
 
 }
+
 RT_PROGRAM void closest_hit_radiance()
 {
     const float3 world_shading_normal   = normalize( rtTransformNormal( RT_OBJECT_TO_WORLD, shading_normal ) );
@@ -693,9 +698,9 @@ RT_PROGRAM void closest_hit_radiance()
 
     float3 hitPoint = ray.origin + t_hit * ray.direction;
     prd_radiance.origin = hitPoint;
-    // initialize the ray stokes information
+    // initialize the ray's stokes information
     initPayload();
-
+    prd_radiance.lightData.referenceX = normalize(ray.direction);
     // Connect to the area Light
     {
         if(isAreaLight == 1){
@@ -709,7 +714,6 @@ RT_PROGRAM void closest_hit_radiance()
             if(fmaxf(dot(ffnormal, L), 0.0f) * fmaxf(dot(ffnormal, V), 0.0f) > 0.0025 ){
                 float cosPhi = dot(L, normal);
                 cosPhi = (cosPhi < 0) ? -cosPhi : cosPhi;
-
                 Ray shadowRay = make_Ray(hitPoint, L, 1, scene_epsilon, Dist - scene_epsilon);
                 PerRayData_shadow prd_shadow;
                 prd_shadow.inShadow = false;
@@ -725,15 +729,14 @@ RT_PROGRAM void closest_hit_radiance()
                     }
                     else {
                         float pdfAreaLight2 = pdfAreaLight * pdfAreaLight;
-                        float pdfSolidBRDF = pdf(L, V, N, roughValue, metallicValue, radiance);
+                        float pdfSolidBRDF = pdf(L, V, N, roughValue, metallicValue, albedoValue, specularValue);
                         float pdfAreaBRDF = pdfSolidBRDF * cosPhi / Dist / Dist;
                         float pdfAreaBRDF2 = pdfAreaBRDF * pdfAreaBRDF;
 
                         //prd_radiance.radiance += intensity * pdfAreaLight /
                         //   fmaxf(pdfAreaBRDF2 + pdfAreaLight2, 1e-14) * prd_radiance.attenuation;
-                        SL_MUL_EQ_POL(intensity, pdfAreaLight / fmaxf(pdfAreaBRDF2 + pdfAreaLight2, 1e-14)
-                                                * prd_radiance.attenuation);
-                        SL_ADD_EQ_POL(prd_radiance.lightData, intensity);
+                        SL_MUL_EQ_POL(intensity, pdfAreaLight / fmaxf(pdfAreaBRDF2 + pdfAreaLight2, 1e-14) * prd_radiance.attenuation);
+                        slAddEquals(prd_radiance.lightData, intensity, -ray.direction);
                     }
 
                 }
@@ -752,7 +755,6 @@ RT_PROGRAM void closest_hit_radiance()
                 float3 radiance = pointLights[i].intensity;
                 float3 L = normalize(position - hitPoint);
                 float Dist = length(position - hitPoint);
-                initPayload();
                 if( fmaxf(dot(ffnormal, L), 0.0f) * fmaxf(dot(ffnormal, V), 0.0f) > 0.0025){
                     Ray shadowRay = make_Ray(hitPoint + 0.1 * L * scene_epsilon, L, 1, scene_epsilon, Dist - scene_epsilon);
                     PerRayData_shadow prd_shadow;
@@ -760,10 +762,11 @@ RT_PROGRAM void closest_hit_radiance()
                     rtTrace(top_object, shadowRay, prd_shadow);
                     if(prd_shadow.inShadow == false && prd_radiance.depth != (max_depth - 1) ){
                         StokesLight intensity = evaluate(albedoValue, specularValue, N, roughValue, fresnel, V, L, radiance, metallicValue);
-                        SL_MUL_EQ_POL(intensity, make_float3(1.0 / Dist/ Dist));
+                        //SL_MUL_EQ_POL(intensity, make_float3(1.0 / Dist/ Dist));
                         // prd_radiance.radiance += intensity * prd_radiance.attenuation;
-                        SL_MUL_EQ_POL(intensity, prd_radiance.attenuation);
-                        SL_ADD_EQ_POL(prd_radiance.lightData, intensity);
+                        float3 modi=prd_radiance.attenuation / Dist / Dist;
+                        SL_MUL_EQ_POL(intensity, modi );
+                        slAddEquals(prd_radiance.lightData, intensity, -ray.direction);
 
                 }
                 }
@@ -789,19 +792,20 @@ RT_PROGRAM void closest_hit_radiance()
                     if(prd_radiance.depth == (max_depth - 1) ){
                     }
                     else{
-                        float pdfSolidBRDF = pdf(L, V, N, roughValue, metallicValue, radiance);
+                        float pdfSolidBRDF = pdf(L, V, N, roughValue, metallicValue, albedoValue, specularValue);
                         float pdfSolidBRDF2 = pdfSolidBRDF * pdfSolidBRDF;
                         float pdfSolidEnv2 = pdfSolidEnv * pdfSolidEnv;
                         //prd_radiance.radiance += intensity * pdfSolidEnv /
                         //    fmaxf(pdfSolidEnv2 + pdfSolidBRDF2, 1e-14) * prd_radiance.attenuation;
                         SL_MUL_EQ_POL(intensity, pdfSolidEnv / fmaxf(pdfSolidEnv2 + pdfSolidBRDF2, 1e-14)
                                                  * prd_radiance.attenuation);
-                        SL_ADD_EQ_POL(prd_radiance.lightData, intensity);
+                        slAddEquals(prd_radiance.lightData, intensity, -ray.direction);
                         }
                 }
             }
         }
     }
+    //mirror term
 
     // Sammple the new ray
     sample(prd_radiance.seed,
@@ -809,12 +813,13 @@ RT_PROGRAM void closest_hit_radiance()
         ffnormal, onb,
         prd_radiance.attenuation, prd_radiance.direction, prd_radiance.pdf );
 
-    float3 cameraX  = computeX( cameraU, -ray.direction);
+    //float3 cameraX  = computeX( cameraU, -ray.direction);
+    float3 cameraX = normalize(cameraU);
     //StokesLight pay_radiance=unPolarizedLight(prd_radiance.radiance);
-    //rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
     /* Apply polarizing filter */
     applyPolarizingFilter(prd_radiance.lightData);
-    prd_radiance.radiance=stokesToColor(prd_radiance.lightData);
+    prd_radiance.radiance+= stokesToColor(prd_radiance.lightData);
 }
 
 // any_hit_shadow program for every material include the lighting should be the same
