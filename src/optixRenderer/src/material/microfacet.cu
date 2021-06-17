@@ -570,8 +570,9 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     // slAddEquals will rotate reference frame if needed
     //slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
     //SL_ADD_EQ_UNPOL( prd_radiance.lightData, difusseLight);
-    slAddEquals( reflight, specularStokes, -ray.direction);
-    SL_ADD_EQ_UNPOL( reflight, difusseLight);
+    //slAddEquals( reflight, specularStokes, -ray.direction);
+    //SL_ADD_EQ_UNPOL( reflight, difusseLight);
+    SL_ADD_EQ_UNPOL( specularStokes, difusseLight);
 
     //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
 
@@ -751,6 +752,7 @@ RT_PROGRAM void closest_hit_radiance()
                 float3 radiance = pointLights[i].intensity;
                 float3 L = normalize(position - hitPoint);
                 float Dist = length(position - hitPoint);
+                initPayload();
                 if( fmaxf(dot(ffnormal, L), 0.0f) * fmaxf(dot(ffnormal, V), 0.0f) > 0.0025){
                     Ray shadowRay = make_Ray(hitPoint + 0.1 * L * scene_epsilon, L, 1, scene_epsilon, Dist - scene_epsilon);
                     PerRayData_shadow prd_shadow;
