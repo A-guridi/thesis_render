@@ -96,7 +96,6 @@ rtDeclareVariable(float, extIOR, , );
 
 rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 
-<<<<<<< HEAD
 #define filterCos2A    cos( 2*filterangle *M_PI/180.0);     // we keep the name as in the original renderer thesis
 #define filterSin2A    sin( 2*filterangle *M_PI/180.0);
 
