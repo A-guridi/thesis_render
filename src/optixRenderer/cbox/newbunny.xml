@@ -26,7 +26,7 @@
 	<bsdf type="microfacet" id="white">
         <rgb name="albedo" value="0.5 0.5 0.5"/>
         <rgb name="albedoScale" value="0.5 0.5 0.5"/>
-        <float name="roughnessScale" value="1.0" />
+        <float name="roughnessScale" value="0.8" />
     </bsdf>
 
 	<bsdf type="diffuse" id="red">
@@ -50,6 +50,15 @@
         <transform name="toWorld">
             <rotate x="0.0" y="1.0" z="0.0" angle = "0.0"/>
             <translate x="0.0" y="-0.033" z="0.0" />
+        </transform>
+    </shape>
+
+    <shape type="ply">
+        <string name="filename" value="bunny.ply"/>
+        <ref id="transparent"/>
+        <transform name="toWorld">
+            <rotate x="0.0" y="1.0" z="0.0" angle = "90.0"/>
+            <translate x="0.2" y="0.4" z="0.0" />
         </transform>
     </shape>
 
