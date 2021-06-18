@@ -96,8 +96,10 @@ rtDeclareVariable(float, extIOR, , );
 
 rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 
+<<<<<<< HEAD
 #define filterCos2A    cos( 2*filterangle *M_PI/180.0);     // we keep the name as in the original renderer thesis
 #define filterSin2A    sin( 2*filterangle *M_PI/180.0);
+
 #define filterEnabled   true;
 
 //future note: dont use define for float3, does not work good
@@ -408,6 +410,8 @@ RT_CALLABLE_PROGRAM float SpecularPdf(const float3& L, const float3& V, const fl
 RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalness, const float3& N, const float3& L, const float3& V)
 {
 
+    // do we need to divide by 2? or take it out for a bigger light intensity
+
     float3 H = normalize((V + L)/2.0f);
 
     float  D = D_GGX(roughness, N, H);
@@ -419,7 +423,9 @@ RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalnes
     float NdotL = fmaxf(dot(N,L), 0);
 
     MuellerData F = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
+
     MD_MUL_EQ_SCALAR(F, saturate(D*V_Smith*NdotL));
+
 
     return F;
 }
