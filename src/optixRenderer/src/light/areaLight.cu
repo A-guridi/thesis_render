@@ -29,23 +29,6 @@ rtBuffer<areaLight> areaLights;
 rtBuffer<float> areaLightCDF;
 rtBuffer<float> areaLightPDF;
 
-// HERE STARTS THE CUSTOM IMPLEMENTATION OF THE SHADER
-// the implementation is based on the ray tracing algorithm made in Falcor
-#define TMIN 0.001
-#define TMAX 10000.0
-
-#define M_PI     3.14159265358979323846
-#define M_PI2    6.28318530717958647692
-#define M_INV_PI 0.3183098861837906715
-
-#define COLOR_BLACK  float3(0.0, 0.0, 0.0)
-#define COLOR_RED    float3(1.0, 0.0, 0.0)
-#define COLOR_GREEN  float3(0.0, 1.0, 0.0)
-#define COLOR_BLUE   float3(0.0, 0.0, 1.0)
-#define COLOR_CYAN   float3(0.0, 1.0, 1.0)
-#define COLOR_YELLOW float3(1.0, 1.0, 0.0)
-
-#define REFL_MISS_COLOR COLOR_BLACK
 
 /**
  * RENDER PARTS
