@@ -260,7 +260,7 @@ RT_CALLABLE_PROGRAM void polarizeStokes(float4 &s)
     s.z = float(dot(oldXYZ, make_float3(  b, a*b, b*b)));
     s.w = float(0.0);
 
-    //s*=2.0;
+    s*=2.0;
 }
 
 /** Applies a horizontal polarizing filter that's been rotated clockwise by angle A
