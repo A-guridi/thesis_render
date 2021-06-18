@@ -96,8 +96,8 @@ rtDeclareVariable(float, extIOR, , );
 
 rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 
-#define filterCos2A    cos( 2*filterangle *M_PI/180);     // we keep the name as in the original renderer thesis
-#define filterSin2A    sin( 2*filterangle *M_PI/180);
+#define filterCos2A    cos( 2*filterangle *M_PI/180.0);     // we keep the name as in the original renderer thesis
+#define filterSin2A    sin( 2*filterangle *M_PI/180.0);
 #define filterEnabled   true;
 
 //future note: dont use define for float3, does not work good
@@ -407,7 +407,7 @@ RT_CALLABLE_PROGRAM float SpecularPdf(const float3& L, const float3& V, const fl
 // returns the cookTorrance specular reflection ( not the mirror one)
 RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalness, const float3& N, const float3& L, const float3& V)
 {
-    // do we need to divide by 2? or take it out for a bigger light intensity
+
     float3 H = normalize((V + L)/2.0f);
 
     float  D = D_GGX(roughness, N, H);
@@ -419,7 +419,7 @@ RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalnes
     float NdotL = fmaxf(dot(N,L), 0);
 
     MuellerData F = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
-    MD_MUL_EQ_SCALAR(F, (D*V_Smith*NdotL));
+    MD_MUL_EQ_SCALAR(F, saturate(D*V_Smith*NdotL));
 
     return F;
 }
@@ -515,6 +515,7 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
     // the difuse and specular terms are added in the evaluate function for each ray
     float pdfLambertian = LambertianPdf(L, N);
     float3 diffuseLight = pdfLambertian * albedoValue;
+
     MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
     StokesLight specularStokes = unPolarizedLight(specularValue);
     SL_MUL_EQ_MD(specularStokes, specMueller);
@@ -523,13 +524,14 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
     MuellerData mirrorMueller=mirrorTerm(L, V, N, roughness, metalness);
     StokesLight mirrorStokes = unPolarizedLight(specularValue);
     SL_MUL_EQ_MD(mirrorStokes, mirrorMueller);
-    //SL_MUL_EQ_MD(prd_radiance.lightData, mirrorMueller);
-    //SL_MUL_EQ_MD(prd_radiance.lightData, specMueller);
+
     SL_ADD_EQ_POL(specularStokes, mirrorStokes);
+
+    SL_MUL_EQ_POL(specularStokes, diffuseLight);
 
     float3 new_intensity = make_float3( specularStokes.svR.x, specularStokes.svG.x, specularStokes.svB.x );
     //we return the modulo of the intensity vector of the light as the BRDF
-    return length(new_intensity*diffuseLight);
+    return length(new_intensity);
 }
 
 // this function gets a ray data and returns the intensity of the light calculated
@@ -566,18 +568,13 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     specularStokes.referenceX = computeX(H, V);
     rotateReferenceFrame(specularStokes, specularStokes.referenceX, -ray.direction);
 
-    // slAddEquals will rotate reference frame if needed
-    //slAddEquals( prd_radiance.lightData, specularStokes, -ray.direction);
-    //SL_ADD_EQ_UNPOL( prd_radiance.lightData, difusseLight);
-    //slAddEquals( reflight, specularStokes, -ray.direction);
-    //SL_ADD_EQ_UNPOL( reflight, difusseLight);
+    // add the diffuse non-polarized component
     SL_ADD_EQ_UNPOL( specularStokes, difusseLight);
 
     //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
 
-    //the intensity is a float3 vector with the values of RGB and the radiance is the intensity of each channel (how bright)
+    //the returned intensity is a StokesLight struct, multiplied by the radiance of each channel
     //return intensity * radiance;
-    //return intensity;
     SL_MUL_EQ_POL(specularStokes, radiance);
     return specularStokes;
 }
@@ -610,8 +607,8 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
                 sqrt(1 - z1_2_nP1) * sin(2 * M_PIf * z2),
                 z1_1_nP1
         );
-        optix::Onb ronb(V);
-        ronb.inverse_transform(L);
+        //optix::Onb ronb(V);
+        onb.inverse_transform(L);
         float NoL = fmaxf(dot(N, L), 1e-14);
         attenuation = attenuation * specularValue * NoL * (albedoStr + specularStr) / fmaxf(specularStr, 1e-14);
     }
@@ -619,7 +616,7 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     //calculate the pdf term
     pdfSolid = pdf(L, V, N, rough, metalness, albedoValue, specularValue);
 
-    // add the mirror term
+    // add the mirror term to the payload
     MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
     StokesLight mirrorLight=unPolarizedLight(specularValue);
     SL_MUL_EQ_MD(mirrorLight, mirrorRay);
@@ -819,6 +816,7 @@ RT_PROGRAM void closest_hit_radiance()
     rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
     /* Apply polarizing filter */
     applyPolarizingFilter(prd_radiance.lightData);
+
     prd_radiance.radiance+= stokesToColor(prd_radiance.lightData);
 }
 
