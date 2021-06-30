@@ -421,9 +421,9 @@ RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalnes
     float  V_Smith = V_SmithGGX(N, L, V, roughness);
 
     float sinTheta = length(cross(L, H));
-    float cosTheta = fmaxf(dot(L,H), 0); // used since (LdotH == VdotH)
+    float cosTheta = fmaxf(dot(L,H), 1e-14); // used since (LdotH == VdotH)
     float tanTheta = sinTheta/cosTheta;
-    float NdotL = fmaxf(dot(N,L), 0);
+    float NdotL = fmaxf(dot(N,L), 1e-14);
 
     MuellerData F = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
 
@@ -538,7 +538,7 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
 
     SL_MUL_EQ_POL(specularStokes, diffuseLight);
 
-    float3 new_intensity = make_float3( specularStokes.svR.x, specularStokes.svG.x, specularStokes.svB.x );
+    float3 new_intensity = make_float3( saturate(specularStokes.svR.x), saturate(specularStokes.svG.x), saturate(specularStokes.svB.x ));
     //we return the modulo of the intensity vector of the light as the BRDF
     return length(new_intensity);
 }
