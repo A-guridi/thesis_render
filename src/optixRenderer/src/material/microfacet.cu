@@ -96,8 +96,8 @@ rtDeclareVariable(float, extIOR, , );
 
 rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 
-#define filterCos2A    cos( 2*filterangle *M_PI/180.0);     // we keep the name as in the original renderer thesis
-#define filterSin2A    sin( 2*filterangle *M_PI/180.0);
+//#define filterCos2A    cos( 2*filterangle *M_PI/180.0);     // we keep the name as in the original renderer thesis
+//#define filterSin2A    sin( 2*filterangle *M_PI/180.0);
 
 #define filterEnabled   true;
 
@@ -146,13 +146,15 @@ RT_CALLABLE_PROGRAM float3 stokesToColor(StokesLight sl) {
     float3 r=make_float3(saturate(sl.svR.x), saturate(sl.svG.x), saturate(sl.svB.x));
     return r;
 }
+
+RT_CALLABLE_PROGRAM float3 stokesToColor2(StokesLight sl) {
+    float3 r=make_float3(saturate(sl.svR.y), saturate(sl.svG.y), saturate(sl.svB.y));
+    return r;
+}
+
 //* operator for a light vector and a 4x4 matrix
-RT_CALLABLE_PROGRAM float4 vec_mat_multi(float4 vec, float4x4 mat) {
-    float4 col0=make_float4(mat.r0.x, mat.r1.x, mat.r2.x, mat.r3.x);
-    float4 col1=make_float4(mat.r0.y, mat.r1.y, mat.r2.y, mat.r3.y);
-    float4 col2=make_float4(mat.r0.z, mat.r1.z, mat.r2.z, mat.r3.z);
-    float4 col3=make_float4(mat.r0.w, mat.r1.w, mat.r2.w, mat.r3.w);
-    return make_float4(dot(vec, col0), dot(vec, col1), dot(vec, col2), dot(vec,col3) );
+RT_CALLABLE_PROGRAM float4 vec_mat_multi2(float4 vec, float4x4 mat) {
+    return make_float4(dot(mat.r0, vec), dot(mat.r1, vec), dot(mat.r2, vec), dot(mat.r3, vec) );
 }
 //**************************************************************************************************
 // Operator macros for StokesLight and MuellerData
@@ -176,9 +178,9 @@ RT_CALLABLE_PROGRAM float4 vec_mat_multi(float4 vec, float4x4 mat) {
 
 
 // operator *= for StokesLight and MuellerData
-#define SL_MUL_EQ_MD(sl, md) sl.svR = vec_mat_multi(sl.svR, md.mmR); \
-                             sl.svG = vec_mat_multi(sl.svG, md.mmG); \
-                             sl.svB = vec_mat_multi(sl.svB, md.mmB);
+#define SL_MUL_EQ_MD(sl, md) sl.svR = vec_mat_multi2(sl.svR, md.mmR); \
+                             sl.svG = vec_mat_multi2(sl.svG, md.mmG); \
+                             sl.svB = vec_mat_multi2(sl.svB, md.mmB);
 
 
 // operator *= for MuellerData and a scalar
@@ -251,8 +253,10 @@ RT_CALLABLE_PROGRAM void slAddEquals(StokesLight &a, StokesLight b, float3 dir)
 */
 RT_CALLABLE_PROGRAM void polarizeStokes(float4 &s)
 {
-    const float a = filterCos2A;
-    const float b = filterSin2A;
+    //const float a = filterCos2A;
+    //const float b = filterSin2A;
+    const float a = cos(2 * filterangle * M_PI / 180.0);
+    const float b = sin(2 * filterangle * M_PI / 180.0);
     float3 oldXYZ = make_float3(s.x, s.y, s.z);
 
     s.x = float(dot(oldXYZ, make_float3(1.0,   a,   b)));
@@ -260,7 +264,7 @@ RT_CALLABLE_PROGRAM void polarizeStokes(float4 &s)
     s.z = float(dot(oldXYZ, make_float3(  b, a*b, b*b)));
     s.w = float(0.0);
 
-    s*=2.0;
+    s=s*2.0;
 }
 
 /** Applies a horizontal polarizing filter that's been rotated clockwise by angle A
@@ -599,13 +603,14 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     float albedoStr = length(albedoValue );
     float specularStr = length(specularValue );
 
-    if(z <= albedoStr / fmaxf(albedoStr + specularStr, 1e-14) || (albedoStr + specularStr) < 1e-14 ){
+    /*if(z <= albedoStr / fmaxf(albedoStr + specularStr, 1e-14) || (albedoStr + specularStr) < 1e-14 ){
         cosine_sample_hemisphere(z1, z2, L);
         onb.inverse_transform(L);
         attenuation = attenuation * albedoValue * (albedoStr + specularStr) / fmaxf(albedoStr, 1e-14);
     }
-    else{
-        float z1_1_nP1 = pow(z1, 1 / (metalness +1) );
+    */
+    //else{
+        float z1_1_nP1 = pow(z1, 1 / (metalness + 0) );
         float z1_2_nP1 = z1_1_nP1 * z1_1_nP1;
         L = make_float3(
                 sqrt(1 - z1_2_nP1) * cos(2 * M_PIf * z2),
@@ -616,7 +621,7 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
         onb.inverse_transform(L);
         float NoL = fmaxf(dot(N, L), 1e-14);
         attenuation = attenuation * specularValue * NoL * (albedoStr + specularStr) / fmaxf(specularStr, 1e-14);
-    }
+    //}
 
     //calculate the pdf term
     pdfSolid = pdf(L, V, N, rough, metalness, albedoValue, specularValue);
