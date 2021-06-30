@@ -423,7 +423,7 @@ RT_CALLABLE_PROGRAM MuellerData CookTorrance_Pol(float roughness, float metalnes
 
     MuellerData F = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
 
-    MD_MUL_EQ_SCALAR(F, saturate(D*V_Smith*NdotL));
+    MD_MUL_EQ_SCALAR(F, (D*V_Smith*NdotL));
 
 
     return F;
@@ -491,7 +491,7 @@ RT_CALLABLE_PROGRAM MuellerData mirrorTerm (const float3& L, const float3& V, co
     float tanTheta = sinTheta/cosTheta;
 
     MuellerData reflectionBrdf = F_Polarizing(metalness, sinTheta, cosTheta, tanTheta);
-    MD_MUL_EQ_SCALAR(reflectionBrdf, saturate(D*V_Smith*NdotL));
+    MD_MUL_EQ_SCALAR(reflectionBrdf, (D*V_Smith*NdotL));
     return reflectionBrdf;
 
 }
