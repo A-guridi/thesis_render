@@ -572,7 +572,7 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
 
     // All light sources are unpolarized so no reference frame rotation needed before multiplication
-    StokesLight specularStokes = unPolarizedLight(specularValue);
+    StokesLight specularStokes = unPolarizedLight(2*specularValue);
     SL_MUL_EQ_MD(specularStokes, specularMueller);
 
     // The output reference frame's Y vector lies in the specular reflection's plane of
@@ -581,7 +581,13 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     //rotateReferenceFrame(specularStokes, specularStokes.referenceX, -ray.direction);
 
     // add the diffuse non-polarized component
-    //SL_ADD_EQ_UNPOL( specularStokes, diffusseLight);
+    SL_ADD_EQ_UNPOL( specularStokes, diffusseLight);
+
+    //add the mirror term
+    MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
+    StokesLight mirrorLight=unPolarizedLight(2*specularValue);
+    SL_MUL_EQ_MD(mirrorLight, mirrorRay);
+    SL_ADD_EQ_POL(specularStokes, mirrorLight);
 
     //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
 
