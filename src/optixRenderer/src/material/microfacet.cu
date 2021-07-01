@@ -362,7 +362,7 @@ RT_CALLABLE_PROGRAM MuellerData F_Polarizing(float metalness, float sinTheta, fl
 }
 RT_CALLABLE_PROGRAM float D_GGX(float rough, const float3& N, const float3& H)
 {
-    float a2 = rough*rough*rough*rough;
+    float a2 = rough*rough;
     float NdotH = fmaxf(dot(N,H), 0);
     float d  = ((NdotH*a2 - NdotH)*NdotH + 1.0);
     return a2/(M_PI*d*d);
@@ -373,7 +373,7 @@ RT_CALLABLE_PROGRAM float D_GGX(float rough, const float3& N, const float3& H)
 */
 RT_CALLABLE_PROGRAM float V_SmithGGX(const float3& N, const float3& L, const float3& V, float roughness)
 {
-    float a2 = roughness*roughness*roughness*roughness;
+    float a2 = roughness*roughness;
     float NdotL = fmaxf(dot(N,L), 1e-14);
     float NdotV = fmaxf(dot(N,V), 1e-14);
     float ggxv = NdotL*sqrt((-NdotV*a2 + NdotV)*NdotV + a2);
