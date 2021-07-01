@@ -150,6 +150,11 @@ RT_CALLABLE_PROGRAM float3 stokesToColor2(StokesLight sl) {
     return r;
 }
 
+RT_CALLABLE_PROGRAM float3 stokesToColor3(StokesLight sl) {
+    float3 r=make_float3(saturate(sl.svR.z), saturate(sl.svG.z), saturate(sl.svB.z));
+    return r;
+}
+
 //* operator for a light vector and a 4x4 matrix
 RT_CALLABLE_PROGRAM float4 vec_mat_multi2(float4 vec, float4x4 mat) {
     return make_float4(dot(mat.r0, vec), dot(mat.r1, vec), dot(mat.r2, vec), dot(mat.r3, vec) );
@@ -316,7 +321,7 @@ RT_CALLABLE_PROGRAM float4x4 F_MuellerMatrix(float n, float k, float sinTheta, f
     float D_ort = atan((2*b*cosTheta)/(ct2 - a2 - b2));
     float D_par = atan((2*cosTheta*((n2 - k2)*b - 2*n*k*a))/((n2 + k2)*(n2 + k2)*ct2 - a2 - b2));
 
-    float phaseDiff = D_ort - D_par;
+    float phaseDiff = abs(D_ort - D_par);
 
     // Matrix components
     float A = 0.5*(F_ort + F_par);
@@ -369,8 +374,8 @@ RT_CALLABLE_PROGRAM float D_GGX(float rough, const float3& N, const float3& H)
 RT_CALLABLE_PROGRAM float V_SmithGGX(const float3& N, const float3& L, const float3& V, float roughness)
 {
     float a2 = roughness*roughness*roughness*roughness;
-    float NdotL = fmaxf(dot(N,L), 0);
-    float NdotV = fmaxf(dot(N,V), 0);
+    float NdotL = fmaxf(dot(N,L), 1e-14);
+    float NdotV = fmaxf(dot(N,V), 1e-14);
     float ggxv = NdotL*sqrt((-NdotV*a2 + NdotV)*NdotV + a2);
     float ggxl = NdotV*sqrt((-NdotL*a2 + NdotL)*NdotL + a2);
     return 0.5/(ggxv + ggxl);
@@ -524,7 +529,7 @@ RT_CALLABLE_PROGRAM float pdf(const float3& L, const float3& V, const float3& N,
     float3 diffuseLight = pdfLambertian * albedoValue;
 
     MuellerData specMueller=CookTorrance_Pol(roughness, metalness, N, L, V);
-    StokesLight specularStokes = unPolarizedLight(specularValue);
+    StokesLight specularStokes = unPolarizedLight(2.0*specularValue);
     SL_MUL_EQ_MD(specularStokes, specMueller);
 
     // in this function we take those terms saved and add the mirror reflection to it
@@ -561,7 +566,7 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     // Diffuse is unpolarized so calculations with a float3 is sufficient
 
     float diffuseComp = LambertianPdf(L, N);
-    float3 difusseLight = albedoValue*diffuseComp;
+    float3 diffusseLight = albedoValue*diffuseComp;
 
     /* Specular component */
     MuellerData specularMueller = CookTorrance_Pol(rough, metalness, N, L, V);
@@ -576,7 +581,7 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     //rotateReferenceFrame(specularStokes, specularStokes.referenceX, -ray.direction);
 
     // add the diffuse non-polarized component
-    SL_ADD_EQ_UNPOL( specularStokes, difusseLight);
+    //SL_ADD_EQ_UNPOL( specularStokes, diffusseLight);
 
     //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
 
@@ -663,7 +668,7 @@ RT_PROGRAM void closest_hit_radiance()
 
     //added specular light from phong.cu
     float3 specularValue;
-    if(isSpecularTexture == 0){
+    /*if(isSpecularTexture == 0){
         specularValue = specular;
     }
     else{
@@ -671,7 +676,12 @@ RT_PROGRAM void closest_hit_radiance()
         specularValue.x = pow(specularValue.x, 2.2);
         specularValue.y = pow(specularValue.y, 2.2);
         specularValue.z = pow(specularValue.z, 2.2);
-    }
+    }*/
+
+    specularValue=fresnel;
+
+    specularValue=(albedoValue+specularValue)/2.0;
+    albedoValue=specularValue;
 
 
     float3 colorSum = fmaxf(albedoValue + specularValue, make_float3(1e-14f) );
@@ -823,11 +833,11 @@ RT_PROGRAM void closest_hit_radiance()
     //float3 cameraX  = computeX( cameraU, -ray.direction);
     float3 cameraX = normalize(cameraU);
     //StokesLight pay_radiance=unPolarizedLight(prd_radiance.radiance);
-    rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
+    //rotateReferenceFrame(prd_radiance.lightData, cameraX, -ray.direction);
     /* Apply polarizing filter */
     applyPolarizingFilter(prd_radiance.lightData);
 
-    prd_radiance.radiance += stokesToColor(prd_radiance.lightData);
+    prd_radiance.radiance += stokesToColor2(prd_radiance.lightData);
 }
 
 // any_hit_shadow program for every material include the lighting should be the same
