@@ -105,9 +105,7 @@ rtDeclareVariable(float3, cameraU, , );  // camera up vector to rotate the light
 //#define nonMetalIoRn make_float3(intIOR, intIOR, intIOR); // the Index of Refraction, usually around 1.3-1.5 for glass materials
 //#define metalIoRn make_float3(0.0); // non-metal
 //#define metalIoRk make_float3(0.0); // the complex part of the index is 0 for non-metallic materials
-/**
- * Added Light Data structures
- */
+
 rtDeclareVariable( rtObject, top_object, , );
 
 rtDeclareVariable(
@@ -575,7 +573,7 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     // The output reference frame's Y vector lies in the specular reflection's plane of
     // incidence so the microfacet normal H is used to calculate the X vector
     specularStokes.referenceX = computeX(H, V);
-    rotateReferenceFrame(specularStokes, specularStokes.referenceX, -ray.direction);
+    //rotateReferenceFrame(specularStokes, specularStokes.referenceX, -ray.direction);
 
     // add the diffuse non-polarized component
     SL_ADD_EQ_UNPOL( specularStokes, difusseLight);
@@ -627,10 +625,12 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     pdfSolid = pdf(L, V, N, rough, metalness, albedoValue, specularValue);
 
     // add the mirror term to the payload
+    /*
     MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
     StokesLight mirrorLight=unPolarizedLight(specularValue);
     SL_MUL_EQ_MD(mirrorLight, mirrorRay);
     slAddEquals(prd_radiance.lightData, mirrorLight, -ray.direction);
+     */
 
 }
 
@@ -707,7 +707,7 @@ RT_PROGRAM void closest_hit_radiance()
     prd_radiance.origin = hitPoint;
     // initialize the ray's stokes information
     initPayload();
-    prd_radiance.lightData.referenceX = normalize(ray.direction);
+    prd_radiance.lightData.referenceX = computeX(N, -ray.direction);
     // Connect to the area Light
     {
         if(isAreaLight == 1){
@@ -827,7 +827,7 @@ RT_PROGRAM void closest_hit_radiance()
     /* Apply polarizing filter */
     applyPolarizingFilter(prd_radiance.lightData);
 
-    prd_radiance.radiance+= stokesToColor(prd_radiance.lightData);
+    prd_radiance.radiance += stokesToColor(prd_radiance.lightData);
 }
 
 // any_hit_shadow program for every material include the lighting should be the same
