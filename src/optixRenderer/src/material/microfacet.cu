@@ -584,11 +584,12 @@ RT_CALLABLE_PROGRAM StokesLight evaluate(const float3& albedoValue, const float3
     SL_ADD_EQ_UNPOL( specularStokes, diffusseLight);
 
     //add the mirror term
+    /*
     MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
     StokesLight mirrorLight=unPolarizedLight(2*specularValue);
     SL_MUL_EQ_MD(mirrorLight, mirrorRay);
     SL_ADD_EQ_POL(specularStokes, mirrorLight);
-
+    */
     //float3 intensity = make_float3( prd_radiance.lightData.svR.x, prd_radiance.lightData.svG.x, prd_radiance.lightData.svB.x );
 
     //the returned intensity is a StokesLight struct, multiplied by the radiance of each channel
@@ -636,12 +637,15 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     pdfSolid = pdf(L, V, N, rough, metalness, albedoValue, specularValue);
 
     // add the mirror term to the payload
-    /*
+
     MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
-    StokesLight mirrorLight=unPolarizedLight(specularValue);
-    SL_MUL_EQ_MD(mirrorLight, mirrorRay);
-    slAddEquals(prd_radiance.lightData, mirrorLight, -ray.direction);
-     */
+    //StokesLight mirrorLight=unPolarizedLight(specularValue);
+    // Align the incoming light's reference frame
+    float3 incomingRefX = computeX(N, ray.direction);
+    rotateReferenceFrame(prd_radiance.lightData, incomingRefX, ray.direction);
+    SL_MUL_EQ_MD(prd_radiance.lightData, mirrorRay);
+    //slAddEquals(prd_radiance.lightData, mirrorLight, -ray.direction);
+
 
 }
 
@@ -686,8 +690,8 @@ RT_PROGRAM void closest_hit_radiance()
 
     specularValue=fresnel;
 
-    specularValue=(albedoValue+specularValue)/2.0;
-    albedoValue=specularValue;
+    //specularValue=(albedoValue+specularValue)/2.0;
+    //albedoValue=specularValue;
 
 
     float3 colorSum = fmaxf(albedoValue + specularValue, make_float3(1e-14f) );
