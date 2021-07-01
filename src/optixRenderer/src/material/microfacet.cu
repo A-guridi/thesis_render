@@ -639,12 +639,12 @@ RT_CALLABLE_PROGRAM void sample(unsigned& seed, const float3& albedoValue, const
     // add the mirror term to the payload
 
     MuellerData mirrorRay=mirrorTerm(L, V, N, rough, metalness);
-    //StokesLight mirrorLight=unPolarizedLight(specularValue);
+    StokesLight mirrorLight=unPolarizedLight(specularValue);
     // Align the incoming light's reference frame
     float3 incomingRefX = computeX(N, ray.direction);
     rotateReferenceFrame(prd_radiance.lightData, incomingRefX, ray.direction);
-    SL_MUL_EQ_MD(prd_radiance.lightData, mirrorRay);
-    //slAddEquals(prd_radiance.lightData, mirrorLight, -ray.direction);
+    SL_MUL_EQ_MD(mirrorLight, mirrorRay);
+    slAddEquals(prd_radiance.lightData, mirrorLight, ray.direction);
 
 
 }
